@@ -3,6 +3,11 @@
 
 export interface GameConfig {
   floors: number;
+  /** floors open up during a shift: `start` are open at the beginning, then one more every `every` seconds */
+  opening: {
+    start: number;
+    every: number;
+  };
 
   lift: {
     capacity: number;
@@ -25,6 +30,8 @@ export interface GameConfig {
     ridingDrain: number;
     /** queue length per floor; no spawns on a full floor */
     maxWaitingPerFloor: number;
+    /** newcomers' patience shrinks to this fraction of `patience` over spawn.rampTime */
+    latePatience: number;
   };
 
   spawn: {
@@ -74,6 +81,10 @@ export interface GameConfig {
 
 export const DEFAULT_CONFIG: GameConfig = {
   floors: 3, // the bare minimum; Taller Tower (shop) adds floors
+  opening: {
+    start: 2,
+    every: 20, // seconds of play (the difficulty clock), so a full 8-floor tower is open by rampTime
+  },
   lift: {
     capacity: 1, // one seat to start; Bigger Cab (shop) and Roomy Cab (perk) add more
     maxSpeed: 2.2, // Better Motor (shop) and Turbo Motor (perk) speed it up
@@ -86,13 +97,14 @@ export const DEFAULT_CONFIG: GameConfig = {
     patience: 20,
     ridingDrain: 0.35,
     maxWaitingPerFloor: 6,
+    latePatience: 0.75,
   },
   spawn: {
     firstDelay: 0.6,
-    startInterval: 4.0,
+    startInterval: 3.4,
     minInterval: 1.4,
-    rampTime: 180,
-    overtimeHalfLife: 110,
+    rampTime: 120,
+    overtimeHalfLife: 170,
     floorInterval: 0.3,
     jitter: 0.35,
   },

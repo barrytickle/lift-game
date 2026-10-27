@@ -34,7 +34,7 @@ export class Autopilot {
 
     let best = -1;
     let bestScore = 0;
-    for (let f = 0; f < w.cfg.floors; f++) {
+    for (let f = 0; f < w.openFloors; f++) {
       if (f === at) continue;
       const drop = w.lift.riders.filter((id) => w.passengers.get(id)!.dest === f).length;
       const room = w.lift.capacity - w.lift.riders.length + drop;

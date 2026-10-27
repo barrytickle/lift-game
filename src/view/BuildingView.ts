@@ -9,8 +9,10 @@ export class BuildingView {
   private flashes: Phaser.GameObjects.Rectangle[] = [];
   private plaques: Phaser.GameObjects.Container[] = [];
   private plaqueGlows: Phaser.GameObjects.Arc[] = [];
+  /** taped-off cover per floor that hasn't opened yet (null once open) */
+  private closed: { root: Phaser.GameObjects.Container; tapes: Phaser.GameObjects.Graphics[]; sign: Phaser.GameObjects.Text; x: number }[] = [];
 
-  constructor(private scene: Phaser.Scene, layout: Layout, rooms: RoomTheme[]) {
+  constructor(private scene: Phaser.Scene, layout: Layout, rooms: RoomTheme[], open: number) {
     const g = scene.add.graphics().setDepth(0);
     const { floors, floorH, shaftX, shaftW } = layout;
     const left = 16;
@@ -85,6 +87,79 @@ export class BuildingView {
     // Outside ground
     g.fillStyle(COLORS.nightLight, 1).fillRect(0, GROUND_Y + 6, W, 200);
     g.fillStyle(0x4a4d6c, 1).fillRect(0, GROUND_Y + 6, W, 6); // kerb
+
+    for (let f = open; f < floors; f++) this.closed[f] = this.drawClosed(layout, f);
+  }
+
+  /** A floor that isn't open yet: dimmed, crossed with hazard tape, with a sign. */
+  private drawClosed(layout: Layout, f: number) {
+    const scene = this.scene;
+    const { floorH, shaftX, shaftW } = layout;
+    const top = layout.floorY(f) - floorH;
+    const root = scene.add.container(0, 0).setDepth(2.5);
+    const shade = scene.add.graphics();
+    shade.fillStyle(COLORS.night, 0.78).fillRect(16, top, W - 32, floorH);
+    root.add(shade);
+
+    // Two strips of tape crossing the room, each a little graphics strip rotated into place.
+    const roomL = shaftX + shaftW / 2 + 6;
+    const cx = (roomL + W - 16) / 2;
+    const cy = top + floorH / 2;
+    const len = W - 16 - roomL + 30;
+    const tapes = [-1, 1].map((side) => {
+      const t = scene.add.graphics({ x: cx, y: cy });
+      t.fillStyle(0xf2c230, 1).fillRect(-len / 2, -9, len, 18);
+      t.fillStyle(0x2b2d42, 1);
+      for (let x = -len / 2 + 4; x < len / 2 - 12; x += 26) t.fillTriangle(x, 9, x + 9, -9, x + 18, -9).fillTriangle(x, 9, x + 18, -9, x + 9, 9);
+      t.setAngle(side * Math.min(24, (floorH / len) * 60));
+      return t;
+    });
+    root.add(tapes);
+
+    const sign = scene.add
+      .text(cx, cy, 'OPENING SOON', {
+        fontFamily: FONT,
+        fontSize: '15px',
+        fontStyle: 'bold',
+        color: hex(COLORS.ink),
+        backgroundColor: '#fff4dc',
+        padding: { x: 10, y: 5 },
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setResolution(DPR * 2);
+    root.add(sign);
+    return { root, tapes, sign, x: cx };
+  }
+
+  /** Countdown on the next floor to open; the rest just say they're coming. */
+  updateClosed(next: number, secondsLeft: number): void {
+    const c = this.closed[next];
+    if (!c || !Number.isFinite(secondsLeft)) return;
+    c.sign.setText(`OPENS IN ${Math.max(1, Math.ceil(secondsLeft))}s`);
+  }
+
+  /** Rip the tape off a floor that's just opened. */
+  open(f: number): void {
+    const c = this.closed[f];
+    if (!c) return;
+    delete this.closed[f];
+    const scene = this.scene;
+    c.tapes.forEach((t, i) =>
+      scene.tweens.add({ targets: t, y: t.y + 60, angle: t.angle + (i ? 40 : -40), alpha: 0, duration: 520, ease: 'Quad.In' }),
+    );
+    scene.tweens.add({ targets: c.sign, scale: 1.25, alpha: 0, duration: 360, ease: 'Back.In' });
+    scene.tweens.add({ targets: c.root.list[0], alpha: 0, duration: 600, delay: 120, onComplete: () => c.root.destroy() });
+    this.flash(f);
+  }
+
+  /** Little shake when someone taps a floor that's still taped off. */
+  nudgeClosed(f: number): void {
+    const c = this.closed[f];
+    if (!c) return;
+    this.scene.tweens.killTweensOf(c.sign);
+    c.sign.x = c.x;
+    this.scene.tweens.add({ targets: c.sign, x: c.x + 6, duration: 50, yoyo: true, repeat: 2 });
   }
 
   /**

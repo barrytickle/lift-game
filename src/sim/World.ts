@@ -37,6 +37,8 @@ export interface WorldEvents {
   /** breather over: back to normal play */
   recovered: Record<string, never>;
   arrive: { floor: number };
+  /** another floor opened up mid-shift (floors open bottom to top) */
+  floorOpen: { floor: number };
   depart: { from: number; to: number };
   /** sim pauses until choosePerk() is called */
   draft: { offer: Perk[] };
@@ -64,6 +66,8 @@ export class World {
   delivered = 0;
   lives: number;
   maxLives: number;
+  /** floors 0..openFloors-1 are in service; the rest are taped off until the shift opens them */
+  openFloors: number;
   /** difficulty clock: stands still during walkouts */
   time = 0;
   /** wall-clock time on shift for the results screen */
@@ -83,6 +87,8 @@ export class World {
   /** delivery count when the previous draft came up (0 at the start of a shift) */
   private lastDraftAt = 0;
   private draftsTaken = 0;
+  /** floors open when the shift began */
+  private readonly firstOpen: number;
   /** seconds of walkout breather left */
   private breather = 0;
   /** seconds left of the eased spawn rate after a walkout */
@@ -95,6 +101,7 @@ export class World {
     this.lift = new Lift(cfg.lift);
     this.queues = Array.from({ length: cfg.floors }, () => []);
     this.lives = this.maxLives = cfg.lives;
+    this.openFloors = this.firstOpen = Math.max(1, Math.min(cfg.floors, cfg.opening.start));
     this.spawnTimer = cfg.spawn.firstDelay;
     this.nextDraftAt = cfg.draft.first;
   }
@@ -118,7 +125,7 @@ export class World {
 
   /** Player input: send the lift to a floor. Allowed at any time, even mid-trip. */
   requestFloor(floor: number): void {
-    if (!this.live || floor < 0 || floor >= this.cfg.floors) return;
+    if (!this.live || floor < 0 || floor >= this.openFloors) return;
     this.holding = 0;
     if (floor === this.lift.target) return;
     const from = this.lift.stoppedAt;
@@ -131,14 +138,14 @@ export class World {
     if (!this.live) return;
     const from = this.lift.stoppedAt;
     this.holding = dir;
-    this.lift.hold(dir, this.cfg.floors);
+    this.lift.hold(dir, this.openFloors);
     if (from !== null && this.lift.target !== from) this.events.emit('depart', { from, to: this.lift.target });
   }
 
   /** Player input: ▲/▼ let go, so stop at the next floor in that direction. */
   release(): void {
     if (!this.holding) return;
-    this.lift.release(this.holding, this.cfg.floors);
+    this.lift.release(this.holding, this.openFloors);
     this.holding = 0;
   }
 
@@ -158,6 +165,7 @@ export class World {
     this.time += dt;
     this.calm = Math.max(0, this.calm - dt);
 
+    this.tickOpening();
     this.tickSpawning(dt);
     this.tickPatience(dt);
     if (this.state !== 'playing') return;
@@ -193,6 +201,17 @@ export class World {
     for (const p of this.passengers.values()) p.patience = p.maxPatience;
   }
 
+  /** Difficulty-clock time at which the next closed floor opens (Infinity once they're all open). */
+  get nextOpeningAt(): number {
+    if (this.openFloors >= this.cfg.floors) return Infinity;
+    return (this.openFloors - this.firstOpen + 1) * this.cfg.opening.every;
+  }
+
+  private tickOpening(): void {
+    if (this.time < this.nextOpeningAt) return;
+    this.events.emit('floorOpen', { floor: this.openFloors++ });
+  }
+
   /** Resolve the pending draft. Ignored if `id` wasn't on offer. */
   choosePerk(id: string): void {
     if (!this.offer?.some((p) => p.id === id)) return;
@@ -217,6 +236,12 @@ export class World {
     if (this.time < rampTime) return ease * (startInterval + (minInterval - startInterval) * (this.time / rampTime));
     const overtime = minInterval * Math.pow(0.5, (this.time - rampTime) / overtimeHalfLife);
     return ease * Math.max(floorInterval, overtime);
+  }
+
+  /** Newcomers get less patient as the shift ramps up: 1 at the start, latePatience from rampTime on. */
+  patienceScale(): number {
+    const ramp = Math.min(1, this.time / this.cfg.spawn.rampTime);
+    return 1 + (this.cfg.passengers.latePatience - 1) * ramp;
   }
 
   /** Floors that at least one rider wants to get off at. */
@@ -259,7 +284,8 @@ export class World {
   }
 
   spawnPassenger(origin?: number, dest?: number): Passenger | null {
-    const { floors, passengers: pc } = this.cfg;
+    const { passengers: pc } = this.cfg;
+    const floors = this.openFloors;
     if (origin === undefined) {
       const open = [...Array(floors).keys()].filter((f) => this.queues[f].length < pc.maxWaitingPerFloor);
       if (open.length === 0) return null;
@@ -270,12 +296,13 @@ export class World {
       dest = Math.floor(this.rng() * (floors - 1));
       if (dest >= origin) dest++;
     }
+    const patience = pc.patience * this.patienceScale();
     const p: Passenger = {
       id: this.nextId++,
       origin,
       dest,
-      patience: pc.patience,
-      maxPatience: pc.patience,
+      patience,
+      maxPatience: patience,
       state: 'waiting',
       look: this.rng(),
     };

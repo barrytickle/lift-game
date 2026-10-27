@@ -9,7 +9,7 @@ import { BuildingView } from '../view/BuildingView';
 import { CallsView } from '../view/CallsView';
 import { ControlPanel } from '../view/ControlPanel';
 import { Hud } from '../view/Hud';
-import { DPR, FONT, GROUND_Y, H, HUD_H, Layout, W } from '../view/Layout';
+import { DPR, FONT, floorLabel, GROUND_Y, H, HUD_H, Layout, W } from '../view/Layout';
 import { DEPTH_RIDERS, LiftView } from '../view/LiftView';
 import { CAB_SKINS, COLORS, hex } from '../view/Palette';
 import { PassengerView } from '../view/PassengerView';
@@ -55,7 +55,7 @@ export class GameScene extends Phaser.Scene {
   /** drives the lift on the main menu */
   private pilot?: Autopilot;
   /** live values the menu demo overrides, restored when the shift starts */
-  private live?: { spawn: GameConfig['spawn']; draftFirst: number };
+  private live?: { spawn: GameConfig['spawn']; draftFirst: number; openEvery: number };
   /** 0 = game framed in the menu window, 1 = full screen */
   private menuT = 1;
   private starting = false;
@@ -97,11 +97,13 @@ export class GameScene extends Phaser.Scene {
 
     const attract = this.phase === 'title';
     if (attract) {
-      this.live = { spawn: { ...cfg.spawn }, draftFirst: cfg.draft.first };
+      this.live = { spawn: { ...cfg.spawn }, draftFirst: cfg.draft.first, openEvery: cfg.opening.every };
       // Main-menu demo: a calm, steady trickle that never ramps up, no drafts, no game over.
+      // The upper floors stay taped off, just as the shift will begin.
       cfg.spawn.rampTime = Infinity;
       cfg.spawn.startInterval = 2.2;
       cfg.draft.first = Infinity;
+      cfg.opening.every = Infinity;
     }
     this.world = new World(cfg);
     if (attract) {
@@ -111,7 +113,7 @@ export class GameScene extends Phaser.Scene {
 
     this.layout = new Layout(cfg.floors);
     const rooms = this.dealRooms(cfg.floors);
-    this.building = new BuildingView(this, this.layout, rooms);
+    this.building = new BuildingView(this, this.layout, rooms, this.world.openFloors);
     this.liftView = new LiftView(this, this.layout, CAB_SKINS[this.profile.cabSkin] ?? CAB_SKINS['skin-classic']);
     this.panel = new ControlPanel(this, this.layout, {
       hold: (dir) => this.holdLift(dir),
@@ -282,6 +284,19 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
+    ev.on('floorOpen', ({ floor }) => {
+      this.building.open(floor);
+      if (this.quiet) return;
+      sfx.perk();
+      const y = layout.floorY(floor) - layout.floorH / 2;
+      const x = (layout.shaftX + W) / 2 + 20;
+      const msg = label(this, x, y, `Floor ${floorLabel(floor)} open!`, 26, 0xffffff, true)
+        .setOrigin(0.5)
+        .setStroke(hex(COLORS.ink), 6)
+        .setDepth(DEPTH_FX);
+      this.tweens.add({ targets: msg, y: y - 40, alpha: 0, delay: 900, duration: 700, onComplete: () => msg.destroy() });
+    });
+
     ev.on('recovered', () => {
       if (this.quiet) return;
       this.phase = 'play';
@@ -343,7 +358,7 @@ export class GameScene extends Phaser.Scene {
     if (this.phase !== 'play' || e.repeat) return;
     const k = e.key.toLowerCase();
     if (k === 'g' || k === '0') this.sendTo(0);
-    else if (/^[1-9]$/.test(k)) this.sendTo(Math.min(Number(k), this.world.cfg.floors - 1));
+    else if (/^[1-9]$/.test(k)) this.sendTo(Math.min(Number(k), this.world.openFloors - 1));
     else if (k === 'arrowup') this.panel.press(1);
     else if (k === 'arrowdown') this.panel.press(-1);
   }
@@ -356,6 +371,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private sendTo(f: number): void {
+    if (f >= this.world.openFloors) {
+      this.building.nudgeClosed(f);
+      sfx.nope();
+      return;
+    }
     this.building.flash(f);
     sfx.tap();
     this.world.requestFloor(f);
@@ -377,6 +397,7 @@ export class GameScene extends Phaser.Scene {
     const target = this.cameraTarget();
     cam.scrollY = this.starting && this.phase === 'title' ? target : cam.scrollY + (target - cam.scrollY) * Math.min(1, dt * 6);
     this.building.updateRequested(world.requestedFloors(), this.time_);
+    this.building.updateClosed(world.openFloors, world.nextOpeningAt - world.time);
     this.hud.update(dt);
     this.calls.update(dt, calls, cam.scrollY);
 
@@ -503,6 +524,7 @@ export class GameScene extends Phaser.Scene {
     if (live) {
       Object.assign(world.cfg.spawn, live.spawn);
       world.cfg.draft.first = live.draftFirst;
+      world.cfg.opening.every = live.openEvery;
     }
     world.startShift();
     this.hud.setLives(world.lives, world.maxLives);

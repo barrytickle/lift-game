@@ -8,6 +8,8 @@ const BASE: GameConfig = {
   ...DEFAULT_CONFIG,
   floors: 5,
   lift: { ...DEFAULT_CONFIG.lift, maxSpeed: 3.4, accel: 10 },
+  passengers: { ...DEFAULT_CONFIG.passengers, latePatience: 1 },
+  opening: { start: Infinity, every: 20 },
 };
 
 // No random spawning in these tests: spawns are placed by hand.
@@ -338,6 +340,18 @@ describe('spawning', () => {
     expect(w.spawnInterval()).toBeLessThan(early);
     for (const q of w.queues) expect(q.length).toBeLessThanOrEqual(DEFAULT_CONFIG.passengers.maxWaitingPerFloor);
   });
+
+  it('newcomers get less patient as the shift ramps up, bottoming out at latePatience', () => {
+    const w = makeWorld({ passengers: { ...BASE.passengers, latePatience: 0.6 } });
+    const full = BASE.passengers.patience;
+    expect(w.spawnPassenger(0, 2)!.maxPatience).toBe(full);
+    w.time = BASE.spawn.rampTime / 2;
+    expect(w.spawnPassenger(0, 2)!.maxPatience).toBeCloseTo(full * 0.8);
+    w.time = BASE.spawn.rampTime * 3;
+    const late = w.spawnPassenger(1, 3)!;
+    expect(late.maxPatience).toBeCloseTo(full * 0.6);
+    expect(late.patience).toBe(late.maxPatience);
+  });
 });
 
 describe('menu demo to live shift', () => {
@@ -489,5 +503,54 @@ describe('hold controls', () => {
     w.release();
     run(w, 1);
     expect(w.lift.stoppedAt).toBe(0);
+  });
+});
+
+describe('floors opening mid-shift', () => {
+  const opening = { start: 2, every: 20 };
+
+  it('starts with only the first floors open: no spawns, travel or requests above them', () => {
+    const w = new World({ ...BASE, opening }, Math.random);
+    w.lives = 1e9;
+    expect(w.openFloors).toBe(2);
+    w.requestFloor(3);
+    expect(w.lift.target).toBe(0);
+    w.hold(1);
+    run(w, 5, 1 / 30);
+    expect(w.lift.position).toBeLessThanOrEqual(1);
+    w.release();
+    for (const p of w.passengers.values()) {
+      expect(p.origin).toBeLessThan(2);
+      expect(p.dest).toBeLessThan(2);
+    }
+  });
+
+  it('opens one more floor every `every` seconds, bottom to top, until the tower is full', () => {
+    const w = makeWorld({ opening });
+    const opened: number[] = [];
+    w.events.on('floorOpen', ({ floor }) => opened.push(floor));
+    run(w, 19.5);
+    expect(opened).toEqual([]);
+    expect(w.nextOpeningAt).toBe(20);
+    run(w, 1);
+    expect(opened).toEqual([2]);
+    expect(w.openFloors).toBe(3);
+    run(w, 60);
+    expect(opened).toEqual([2, 3, 4]);
+    expect(w.nextOpeningAt).toBe(Infinity);
+    w.requestFloor(4);
+    expect(w.lift.target).toBe(4);
+  });
+
+  it('the opening clock stands still during a walkout breather', () => {
+    const w = makeWorld({ opening, lift: { ...BASE.lift, capacity: 2 } });
+    w.spawnPassenger(1, 0);
+    run(w, BASE.passengers.patience + 0.1); // nobody fetched them: walkout at ~20 s, floor 2 opened
+    expect(w.state).toBe('walkout');
+    const open = w.openFloors;
+    const t = w.time;
+    run(w, 2);
+    expect(w.time).toBe(t);
+    expect(w.openFloors).toBe(open);
   });
 });

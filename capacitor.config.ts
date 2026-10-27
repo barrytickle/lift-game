@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 // Android playtest build: `npm run android:apk` (see README). The browser build is unaffected.
 const config: CapacitorConfig = {
-  appId: 'com.barrytickle.goingup',
+  appId: 'com.tango.goingup',
   appName: 'Going Up!',
   webDir: 'dist',
   backgroundColor: '#2b2d42',

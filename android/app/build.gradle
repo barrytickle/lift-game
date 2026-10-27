@@ -14,10 +14,10 @@ tasks.matching { it.name in ['bundleRelease', 'assembleRelease'] }.configureEach
 }
 
 android {
-    namespace = "com.barrytickle.goingup"
+    namespace = "com.tango.goingup"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.barrytickle.goingup"
+        applicationId "com.tango.goingup"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Bump versionCode by 1 for every upload to Google Play; versionName is what players see.

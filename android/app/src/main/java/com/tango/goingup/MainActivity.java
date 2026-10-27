@@ -1,4 +1,4 @@
-package com.barrytickle.goingup;
+package com.tango.goingup;
 
 import com.getcapacitor.BridgeActivity;
 

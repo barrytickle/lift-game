@@ -78,6 +78,16 @@ export class Sfx {
     }
   }
 
+  /** App in the background: freeze all audio, music included. */
+  sleep(): void {
+    if (this.ctx?.state === 'running') void this.ctx.suspend();
+  }
+
+  /** Back in the foreground (only if audio was unlocked before). */
+  wake(): void {
+    if (this.ctx?.state === 'suspended') void this.ctx.resume();
+  }
+
   private startMusic(buf: AudioBuffer): void {
     const ctx = this.ctx!;
     const src = ctx.createBufferSource();

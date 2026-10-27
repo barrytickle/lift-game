@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { GameConfig } from '../config';
+import { clearAppHooks, minimizeApp, setAppHooks, type AppHooks } from '../platform';
 import { accessories, bankShift, loadProfile, recordRun, runConfig, saveProfile, type Profile } from '../meta/profile';
 import { Autopilot } from '../sim/autopilot';
 import type { Perk } from '../sim/perks';
@@ -15,13 +16,14 @@ import { PassengerView } from '../view/PassengerView';
 import { FREE_ROOMS, LOBBY, roomById, type RoomTheme } from '../view/rooms';
 import { sfx } from '../view/Sfx';
 import { showResults } from '../view/ResultsCard';
-import { label, PERK_ICONS, pin } from '../view/ui';
+import { label, PERK_ICONS, pillButton, pin } from '../view/ui';
 import { WalkoutBanner } from '../view/WalkoutBanner';
 import { menuLayout, type MenuBackScene, type MenuFrontScene, type Rect } from './MenuScene';
 
 // title (autopilot demo) -> play <-> draft, play <-> walkout (breather), play/walkout -> over (results).
-// These mirror World.state; the menu and results can leave for the shop or restart the scene.
-type Phase = 'title' | 'play' | 'draft' | 'walkout' | 'over';
+// play/walkout <-> paused (app in the background, or Android back). These mirror World.state;
+// the menu and results can leave for the shop or restart the scene.
+type Phase = 'title' | 'play' | 'draft' | 'walkout' | 'paused' | 'over';
 
 const DEPTH_WAITING = 6;
 const DEPTH_FX = 40;
@@ -47,6 +49,7 @@ export class GameScene extends Phaser.Scene {
   private leaving: { view: PassengerView; floor: number; wait: number }[] = [];
   private phase: Phase = 'title';
   private overlay?: Phaser.GameObjects.Container;
+  private pauseCard?: Phaser.GameObjects.Container;
   private groupLabel?: Phaser.GameObjects.Text;
   private time_ = 0;
   /** drives the lift on the main menu */
@@ -57,6 +60,8 @@ export class GameScene extends Phaser.Scene {
   private menuT = 1;
   private starting = false;
   private leavingScene = false;
+  /** what to return to from the pause card */
+  private pausedFrom: Phase = 'play';
 
   constructor() {
     super('game');
@@ -72,6 +77,7 @@ export class GameScene extends Phaser.Scene {
     this.live = undefined;
     this.starting = false;
     this.leavingScene = false;
+    this.pauseCard = undefined;
   }
 
   create(): void {
@@ -121,6 +127,15 @@ export class GameScene extends Phaser.Scene {
 
     this.bindWorldEvents();
     this.events.once('shutdown', () => sfx.motorLevel(0)); // leaving for the shop or restarting
+    const hooks: AppHooks = {
+      background: () => {
+        this.panel.letGo(); // a finger can't still be holding ▲/▼ once the app is away
+        if (this.phase === 'play' || this.phase === 'walkout') this.pause();
+      },
+      back: () => this.onBack(),
+    };
+    setAppHooks(hooks);
+    this.events.once('shutdown', () => clearAppHooks(hooks));
 
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length === 0) this.onTap(ptr); // a chip or button took it
@@ -554,6 +569,50 @@ export class GameScene extends Phaser.Scene {
     });
     pin(c);
     this.overlay = c;
+  }
+
+  /** Android back button. */
+  private onBack(): void {
+    if (this.phase === 'play' || this.phase === 'walkout') this.pause();
+    else if (this.phase === 'paused') this.unpause();
+    else if (this.phase === 'title') minimizeApp();
+    else if (this.phase === 'over') this.restartTo({});
+    // draft: pick a card first
+  }
+
+  /** Freeze the shift (sim, tweens, timers) behind a "Paused" card. */
+  private pause(): void {
+    if (this.phase === 'paused') return;
+    this.pausedFrom = this.phase;
+    this.phase = 'paused';
+    this.panel.letGo();
+    this.tweens.pauseAll();
+    this.time.paused = true;
+
+    const c = this.add.container(0, 0).setDepth(110);
+    c.add(this.add.rectangle(0, 0, W, H, COLORS.night, 0.6).setOrigin(0).setInteractive()); // swallows taps
+    const card = this.add.container(W / 2, H / 2);
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.28).fillRoundedRect(-150, -100 + 8, 300, 200, 28);
+    g.fillStyle(0xfff6ea, 1).fillRoundedRect(-150, -100, 300, 200, 28);
+    card.add(g);
+    card.add(label(this, 0, -62, 'Paused', 40, COLORS.cabFrame, true).setOrigin(0.5).setStroke('#ffffff', 8));
+    card.add(label(this, 0, -22, 'The building will wait.', 17, 0x6b6e8a).setOrigin(0.5));
+    const resume = pillButton(this, 0, 46, 210, 60, 0xec6a50, 0xb84a35, () => this.unpause());
+    resume.add(label(this, 0, 0, 'Resume', 28, 0xffffff, true).setOrigin(0.5));
+    card.add(resume);
+    c.add(card);
+    pin(c);
+    this.pauseCard = c;
+  }
+
+  private unpause(): void {
+    if (this.phase !== 'paused') return;
+    this.pauseCard?.destroy();
+    this.pauseCard = undefined;
+    this.tweens.resumeAll();
+    this.time.paused = false;
+    this.phase = this.pausedFrom;
   }
 
   /** Fade out, then restart the scene: a brand-new World, so nothing from this run carries over. */

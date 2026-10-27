@@ -1,3 +1,4 @@
+import { clearAppHooks, setAppHooks, type AppHooks } from '../platform';
 import Phaser from 'phaser';
 import { ROOM_ITEMS, STYLE_ITEMS, UPGRADES, type ShopItem } from '../meta/catalog';
 import { buy, itemLevel, loadProfile, nextCost, saveProfile, type Profile } from '../meta/profile';
@@ -31,6 +32,10 @@ export class ShopScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Android back = the shop's Back button.
+    const hooks: AppHooks = { background: () => {}, back: () => this.scene.start('game') };
+    setAppHooks(hooks);
+    this.events.once('shutdown', () => clearAppHooks(hooks));
     this.cameras.main.setZoom(DPR).centerOn(W / 2, H / 2);
     this.cameras.main.setBackgroundColor(COLORS.night);
     this.profile = loadProfile();

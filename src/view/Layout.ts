@@ -4,7 +4,9 @@ import Phaser from 'phaser';
 // rest. The canvas is rendered at up to 2x so shapes and text stay crisp.
 
 export const W = 480;
-const aspect = window.innerHeight / Math.max(1, window.innerWidth);
+// Measure the game container (index.html keeps it inside the display's safe area), not the whole window.
+const box = document.getElementById('game')?.getBoundingClientRect();
+const aspect = (box?.height || window.innerHeight) / Math.max(1, box?.width || window.innerWidth);
 export const H = Math.round(W * Math.min(2.2, Math.max(1.5, aspect)));
 export const DPR = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1)));
 

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: the lift cab with an up arrow, in the game's palette. 108dp canvas, art inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- shadow -->
+    <path android:fillColor="#33000000" android:pathData="M41,34h28a6,6 0,0 1,6 6v38a4,4 0,0 1,-4 4h-32a4,4 0,0 1,-4 -4v-38a6,6 0,0 1,6 -6z" />
+    <!-- cab frame -->
+    <path android:fillColor="#E07A5F" android:pathData="M39,30h30a6,6 0,0 1,6 6v40a4,4 0,0 1,-4 4h-34a4,4 0,0 1,-4 -4v-40a6,6 0,0 1,6 -6z" />
+    <!-- top trim -->
+    <path android:fillColor="#FFE08A" android:pathData="M39,30h30a6,6 0,0 1,6 6v-1h-42v1a6,6 0,0 1,6 -6z" />
+    <!-- inside -->
+    <path android:fillColor="#FFF1E0" android:pathData="M40,38h28a2,2 0,0 1,2 2v34a2,2 0,0 1,-2 2h-28a2,2 0,0 1,-2 -2v-34a2,2 0,0 1,2 -2z" />
+    <!-- up arrow -->
+    <path android:fillColor="#E07A5F" android:pathData="M54,42l11,14h-7v14h-8v-14h-7z" />
+</vector>

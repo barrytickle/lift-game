@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Going Up!</string>
+    <string name="title_activity_main">Going Up!</string>
+    <string name="package_name">com.barrytickle.goingup</string>
+    <string name="custom_url_scheme">com.barrytickle.goingup</string>
+</resources>

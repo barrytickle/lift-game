@@ -63,9 +63,11 @@ export class ControlPanel {
     pin(c);
 
     // Letting go anywhere (finger slid off the button) still counts as release.
-    scene.input.on('pointerup', (p: Phaser.Input.Pointer) => {
-      if (p.id === this.holder) this.letGo();
-    });
+    for (const ev of ['pointerup', 'pointerupoutside']) {
+      scene.input.on(ev, (p: Phaser.Input.Pointer) => {
+        if (p.id === this.holder) this.letGo();
+      });
+    }
   }
 
   private makeButton(scene: Phaser.Scene, x: number, y: number, dir: 1 | -1): Phaser.GameObjects.Container {

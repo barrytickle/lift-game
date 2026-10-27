@@ -35,6 +35,14 @@ export class Layout {
     this.floorH = Phaser.Math.Clamp((GROUND_Y - HUD_H - 8) / floors, MIN_FLOOR_H, MAX_FLOOR_H);
   }
 
+  /**
+   * A tower that scrolls a long way needs a solid HUD backing so rooms don't slide
+   * under the counters. One that only overshoots by a few pixels (or fits) shows sky there.
+   */
+  get scrolls(): boolean {
+    return this.minScrollY < -60;
+  }
+
   /** Highest the camera may scroll (negative = up); 0 when the tower fits the screen. */
   get minScrollY(): number {
     return Math.min(0, this.floorY(this.floors) - 30 - HUD_H);

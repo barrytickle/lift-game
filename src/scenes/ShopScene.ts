@@ -26,6 +26,13 @@ export class ShopScene extends Phaser.Scene {
   private tabBar?: Phaser.GameObjects.Container;
   private walletText!: Phaser.GameObjects.Text;
   private walletIcon!: Phaser.GameObjects.Graphics;
+  /** scrolling list window (design-space y) and current offset */
+  private listTop = 0;
+  private listBottom = 0;
+  private listY = 0;
+  private listMin = 0;
+  /** the current touch has moved far enough to be a scroll, not a tap */
+  private dragged = false;
 
   constructor() {
     super('shop');
@@ -40,8 +47,24 @@ export class ShopScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(COLORS.night);
     this.profile = loadProfile();
 
-    this.add.rectangle(0, HUD_H - 4, W, H, COLORS.wallA).setOrigin(0);
+    this.add.rectangle(0, HUD_H - 4, W, H, COLORS.wallA).setOrigin(0).setDepth(-2);
     this.add.rectangle(0, HUD_H - 4, W, 8, COLORS.cabFrame).setOrigin(0);
+    this.listY = 0;
+
+    // Drag (or mouse wheel) to scroll the list when it's taller than its window.
+    let from: { y: number; list: number } | null = null;
+    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+      this.dragged = false;
+      from = ptr.worldY >= this.listTop && ptr.worldY <= this.listBottom ? { y: ptr.worldY, list: this.listY } : null;
+    });
+    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
+      if (!from || !ptr.isDown) return;
+      const dy = ptr.worldY - from.y;
+      if (Math.abs(dy) > 8) this.dragged = true;
+      if (this.dragged) this.scrollList(from.list + dy);
+    });
+    this.input.on('pointerup', () => (from = null));
+    this.input.on('wheel', (_p: Phaser.Input.Pointer, _o: unknown, _dx: number, dy: number) => this.scrollList(this.listY - dy * 0.5));
 
     button(this, 62, 48, 92, 46, '‹ Back', { color: COLORS.shaft, fontSize: 18, onClick: () => this.scene.start('game') });
     label(this, W / 2, 48, 'Shop', 32, 0xffffff, true).setOrigin(0.5);
@@ -75,6 +98,7 @@ export class ShopScene extends Phaser.Scene {
         fontSize: 18,
         onClick: () => {
           this.tab = t.id;
+          this.listY = 0; // new tab starts at the top
           this.refresh();
         },
       });
@@ -82,44 +106,73 @@ export class ShopScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Rows size themselves to their content and stack in a window between the tabs
+   * and the Start button; if they don't all fit, the list scrolls by dragging.
+   */
   private drawList(): void {
     this.list?.destroy();
     const items = TABS.find((t) => t.id === this.tab)!.items;
-    const top = HUD_H + 72;
-    const bottom = H - 92;
+    const top = (this.listTop = HUD_H + 66);
+    const bottom = (this.listBottom = H - 86);
     const gap = 10;
-    const rowH = Math.min(100, (bottom - top - gap * (items.length - 1)) / items.length);
-    const c = (this.list = this.add.container(0, 0));
-    items.forEach((item, i) => c.add(this.row(item, 24, top + i * (rowH + gap), W - 48, rowH)));
+    // Below the header, tabs and Start button (depth 0) so those always get their taps.
+    const c = (this.list = this.add.container(0, 0).setDepth(-1));
+    let y = top + 6;
+    for (const item of items) {
+      const r = this.row(item, 24, y, W - 48);
+      c.add(r.root);
+      y += r.h + gap;
+    }
+    this.listMin = Math.min(0, bottom - (y - gap + 10));
+    this.listY = Phaser.Math.Clamp(this.listY, this.listMin, 0);
+    c.y = this.listY;
+    const mask = this.make.graphics({}, false).fillStyle(0xffffff).fillRect(0, top, W, bottom - top);
+    c.setMask(mask.createGeometryMask());
   }
 
-  private row(item: ShopItem, x: number, y: number, w: number, h: number): Phaser.GameObjects.Container {
+  /** Taps on list buttons only count if they weren't the end of a drag and landed inside the window. */
+  private listTap(fn: () => void): () => void {
+    return () => {
+      const py = this.input.activePointer.worldY;
+      if (this.dragged || py < this.listTop || py > this.listBottom) return;
+      fn();
+    };
+  }
+
+  private scrollList(y: number): void {
+    this.listY = Phaser.Math.Clamp(y, this.listMin, 0);
+    if (this.list) this.list.y = this.listY;
+  }
+
+  private row(item: ShopItem, x: number, y: number, w: number): { root: Phaser.GameObjects.Container; h: number } {
     const p = this.profile;
     const c = this.add.container(x, y);
     const g = this.add.graphics();
-    g.fillStyle(0x000000, 0.08).fillRoundedRect(0, 4, w, h, 16);
-    g.fillStyle(0xffffff, 1).fillRoundedRect(0, 0, w, h, 16);
     c.add(g);
 
-    const thumb = Math.min(h - 16, 74);
+    const thumb = 68;
     // Rooms keep their wide proportions; everything else is square.
     const thumbW = item.kind === 'room' ? thumb * 1.8 : thumb;
-    c.add(this.preview(item, 12 + thumbW / 2, h / 2, thumb));
-
     const tx = 24 + thumbW;
     const level = itemLevel(p, item);
     const cost = nextCost(p, item);
-    // Pips, name and description are stacked and centred as one block. On short
-    // rows (16:9 phones) a two-line description shrinks until it fits the card.
-    const pipH = item.costs.length > 1 ? 11 : 0;
+    // Pips, name and description stack as one block with equal padding above and
+    // below; the row grows to fit it (never shorter than the thumbnail needs).
+    const PAD = 14;
+    const pipH = item.costs.length > 1 ? 12 : 0;
     const name = label(this, tx, 0, item.name, 19, COLORS.ink, true).setOrigin(0, 0).setAlign('left');
     const desc = label(this, tx, 0, item.desc, 14, 0x6b6e8a, false, w - tx - 118).setOrigin(0, 0).setAlign('left');
-    const blockH = () => pipH + name.height + desc.height;
-    for (let size = 13; size >= 11 && blockH() > h - 10; size--) desc.setFontSize(size).setLineSpacing(2);
-    const y0 = Math.round((h - blockH()) / 2);
+    const blockH = pipH + name.height + desc.height;
+    const h = Math.max(thumb + 16, Math.ceil(blockH + 2 * PAD));
+    const y0 = Math.round((h - blockH) / 2);
     name.setY(y0 + pipH);
     desc.setY(name.y + name.height);
     c.add([name, desc]);
+
+    g.fillStyle(0x000000, 0.08).fillRoundedRect(0, 4, w, h, 16);
+    g.fillStyle(0xffffff, 1).fillRoundedRect(0, 0, w, h, 16);
+    c.add(this.preview(item, 12 + thumbW / 2, h / 2, thumb));
 
     // Level pips for multi-level upgrades
     if (pipH) {
@@ -136,7 +189,7 @@ export class ShopScene extends Phaser.Scene {
       const afford = cost <= p.coins;
       const b = button(this, bx, h / 2, 100, 44, '', {
         color: afford ? COLORS.happy : 0xc9c4d4,
-        onClick: () => this.tryBuy(item, b),
+        onClick: this.listTap(() => this.tryBuy(item, b)),
       });
       b.add(coinIcon(this, -30, 0, 9));
       b.add(label(this, 8, 0, cost.toLocaleString(), 17, 0xffffff, true).setOrigin(0.5));
@@ -146,18 +199,18 @@ export class ShopScene extends Phaser.Scene {
         button(this, bx, h / 2, 100, 44, 'Use', {
           color: COLORS.shaft,
           fontSize: 18,
-          onClick: () => {
+          onClick: this.listTap(() => {
             p.cabSkin = item.id;
             saveProfile(p);
             this.refresh();
-          },
+          }),
         }),
       );
     } else {
       const text = isSkin ? 'In use' : item.kind === 'upgrade' ? 'Maxed' : 'Owned';
       c.add(label(this, bx, h / 2, `✓ ${text}`, 16, COLORS.happy, true).setOrigin(0.5));
     }
-    return c;
+    return { root: c, h };
   }
 
   private tryBuy(item: ShopItem, b: Phaser.GameObjects.Container): void {

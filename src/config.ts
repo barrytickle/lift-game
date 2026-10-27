@@ -97,7 +97,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     jitter: 0.35,
   },
   scoring: {
-    base: 10,
+    base: 5, // kept low so shop upgrades take a few shifts to earn
     patienceBonus: 15,
     groupBonus: 5,
     perFloor: 6,

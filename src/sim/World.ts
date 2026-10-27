@@ -80,6 +80,8 @@ export class World {
   private transferTimer = 0;
   private dropsThisStop = 0;
   private nextDraftAt: number;
+  /** delivery count when the previous draft came up (0 at the start of a shift) */
+  private lastDraftAt = 0;
   private draftsTaken = 0;
   /** seconds of walkout breather left */
   private breather = 0;
@@ -99,6 +101,11 @@ export class World {
 
   get over(): boolean {
     return this.state === 'over';
+  }
+
+  /** Perk "XP" for the HUD bar: deliveries since the last draft, and how many the next draft needs. */
+  get draftProgress(): { done: number; need: number } {
+    return { done: this.delivered - this.lastDraftAt, need: this.nextDraftAt - this.lastDraftAt };
   }
 
   /** Player input only counts while playing (not during a walkout or after game over). */
@@ -180,6 +187,7 @@ export class World {
     this.bestDelivery = 0;
     this.calm = 0;
     this.nextDraftAt = this.cfg.draft.first;
+    this.lastDraftAt = 0;
     this.draftsTaken = 0;
     this.spawnTimer = Math.min(this.spawnTimer, this.cfg.spawn.startInterval);
     for (const p of this.passengers.values()) p.patience = p.maxPatience;
@@ -193,6 +201,7 @@ export class World {
     const level = (this.perks[id] = (this.perks[id] ?? 0) + 1);
     this.offer = null;
     const { gap, gapGrowth } = this.cfg.draft;
+    this.lastDraftAt = this.nextDraftAt;
     this.nextDraftAt += gap + gapGrowth * this.draftsTaken++;
     this.events.emit('perk', { perk, level });
   }

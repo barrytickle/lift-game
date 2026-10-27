@@ -3,7 +3,7 @@ import type { Profile } from '../meta/profile';
 import { DPR, FONT, H, W } from '../view/Layout';
 import { COLORS, hex } from '../view/Palette';
 import { sfx } from '../view/Sfx';
-import { coinIcon, label, pillButton } from '../view/ui';
+import { coinIcon, driftCloud, label, pillButton } from '../view/ui';
 
 // The main menu is two thin scenes around GameScene, which keeps running the
 // autopilot tower in a window between them:
@@ -92,21 +92,19 @@ export class MenuBackScene extends Phaser.Scene {
     const g = this.add.graphics();
     g.fillGradientStyle(0x22243a, 0x22243a, 0x33365a, 0x33365a, 1).fillRect(0, 0, W, H);
 
-    // Clouds drifting across the top.
-    const cloud = (x: number, y: number, s: number) => {
-      g.fillStyle(0x3a3e62, 1);
-      g.fillCircle(x, y, 18 * s).fillCircle(x + 20 * s, y - 8 * s, 22 * s).fillCircle(x + 42 * s, y, 16 * s);
-      g.fillRoundedRect(x - 18 * s, y, 76 * s, 16 * s, 8 * s);
-    };
-    cloud(-20, 60, 1.3);
-    cloud(W - 70, 40, 1.1);
-    cloud(W - 30, H * 0.42, 1.2);
-    cloud(-30, H * 0.5, 1);
+    // Clouds drifting slowly right to left, behind the towers.
+    const clouds = [
+      driftCloud(this, -20, 60, 1.3, 11),
+      driftCloud(this, W - 70, 40, 1.1, 9),
+      driftCloud(this, W - 30, H * 0.42, 1.2, 10),
+      driftCloud(this, -30, H * 0.5, 1, 8),
+    ];
 
     // Tower silhouettes down both sides and along the logo band, with lit windows.
+    const tg = this.add.graphics();
     const windows: Phaser.GameObjects.Rectangle[] = [];
     const tower = (x: number, top: number, w: number, color: number) => {
-      g.fillStyle(color, 1).fillRect(x, top, w, H - top);
+      tg.fillStyle(color, 1).fillRect(x, top, w, H - top);
       for (let wy = top + 14; wy < H - 140; wy += 26) {
         for (let wx = x + 8; wx < x + w - 10; wx += 16) {
           if (rnd.frac() < 0.55) continue;
@@ -132,8 +130,8 @@ export class MenuBackScene extends Phaser.Scene {
     });
 
     // Warm floor along the bottom, behind the card and plants.
-    g.fillStyle(0xd38d68, 1).fillRect(0, H - 120, W, 120);
-    g.fillStyle(0xe7a985, 1).fillRect(0, H - 120, W, 8);
+    tg.fillStyle(0xd38d68, 1).fillRect(0, H - 120, W, 120);
+    tg.fillStyle(0xe7a985, 1).fillRect(0, H - 120, W, 8);
 
     // Sparkles in the sky.
     for (const [x, y, s] of [
@@ -153,7 +151,7 @@ export class MenuBackScene extends Phaser.Scene {
       this.tweens.add({ targets: star, scale: 0.5, alpha: 0.5, duration: 900 + rnd.between(0, 600), yoyo: true, repeat: -1, ease: 'Sine.InOut' });
       this.backdrop.push(star);
     }
-    this.backdrop.push(g, ...windows);
+    this.backdrop.push(g, ...clouds, tg, ...windows);
   }
 
   private makeLogo(logoH: number): Phaser.GameObjects.Container {

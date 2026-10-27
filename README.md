@@ -12,7 +12,7 @@ Open the printed URL. To try it on a phone, use the "Network" address while on t
 
 Desktop keys: hold `↑`/`↓` to drive the lift, `G`/`0`–`9` jump to a floor, `Enter` starts a shift.
 
-Scoring: 10 coins per delivery, up to +15 for a quick trip, +6 per floor travelled, and +5 × n for
+Scoring: 5 coins per delivery, up to +15 for a quick trip, +6 per floor travelled, and +5 × n for
 the n-th extra passenger dropped at the same stop. Three hearts per run: each walkout costs one.
 
 ## Android playtest build

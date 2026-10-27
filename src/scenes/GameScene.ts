@@ -3,7 +3,7 @@ import type { GameConfig } from '../config';
 import { clearAppHooks, minimizeApp, setAppHooks, type AppHooks } from '../platform';
 import { accessories, bankShift, loadProfile, recordRun, runConfig, saveProfile, type Profile } from '../meta/profile';
 import { Autopilot } from '../sim/autopilot';
-import type { Perk } from '../sim/perks';
+import { perkById, type Perk } from '../sim/perks';
 import { World } from '../sim/World';
 import { BuildingView } from '../view/BuildingView';
 import { CallsView } from '../view/CallsView';
@@ -119,7 +119,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.calls = new CallsView(this, this.layout, (f) => this.phase === 'play' && this.sendTo(f));
     this.calls.chipsEnabled = !attract;
-    this.hud = new Hud(this, cfg.lives);
+    this.hud = new Hud(this, cfg.lives, { panel: this.layout.scrolls, onPerks: () => this.showPerks() });
     this.banner = new WalkoutBanner(this);
     this.hud.setDelivered(0);
     this.hud.setVisible(!attract);
@@ -248,6 +248,7 @@ export class GameScene extends Phaser.Scene {
       if (!this.quiet) sfx.dropOff(groupIndex);
       this.hud.setScore(this.world.score);
       this.hud.setDelivered(this.world.delivered);
+      this.hud.setDraftProgress(this.world.draftProgress.done, this.world.draftProgress.need);
     });
 
     ev.on('walkout', ({ p, livesLeft, leavers }) => {
@@ -297,6 +298,8 @@ export class GameScene extends Phaser.Scene {
 
     ev.on('perk', ({ perk, level }) => {
       sfx.perk();
+      this.hud.setPerkCount(Object.keys(this.world.perks).length);
+      this.hud.setDraftProgress(this.world.draftProgress.done, this.world.draftProgress.need);
       this.hud.setLives(this.world.lives, this.world.maxLives);
       this.hud.setScore(this.world.score);
       const lv = level > 1 ? ` ${level}` : '';
@@ -505,6 +508,8 @@ export class GameScene extends Phaser.Scene {
     this.hud.setLives(world.lives, world.maxLives);
     this.hud.setScore(0);
     this.hud.setDelivered(0);
+    this.hud.setPerkCount(Object.keys(world.perks).length);
+    this.hud.setDraftProgress(world.draftProgress.done, world.draftProgress.need);
     this.hud.fadeIn();
     this.panel.fadeIn();
     this.calls.chipsEnabled = true;
@@ -580,17 +585,75 @@ export class GameScene extends Phaser.Scene {
     // draft: pick a card first
   }
 
-  /** Freeze the shift (sim, tweens, timers) behind a "Paused" card. */
-  private pause(): void {
-    if (this.phase === 'paused') return;
+  /** Freeze the shift (sim, tweens, timers); the caller puts a card on top. Returns the overlay. */
+  private freeze(): Phaser.GameObjects.Container {
     this.pausedFrom = this.phase;
     this.phase = 'paused';
     this.panel.letGo();
     this.tweens.pauseAll();
     this.time.paused = true;
-
     const c = this.add.container(0, 0).setDepth(110);
     c.add(this.add.rectangle(0, 0, W, H, COLORS.night, 0.6).setOrigin(0).setInteractive()); // swallows taps
+    this.pauseCard = c;
+    return c;
+  }
+
+  /** The HUD's star button: the perks picked so far this shift, with the shift paused. */
+  private showPerks(): void {
+    if (this.phase !== 'play') return;
+    const c = this.freeze();
+    (c.first as Phaser.GameObjects.Rectangle).on('pointerup', () => this.unpause()); // tap outside closes
+
+    const taken = Object.entries(this.world.perks)
+      .map(([id, level]) => ({ perk: perkById(id), level }))
+      .filter((t): t is { perk: Perk; level: number } => !!t.perk);
+    const cw = W - 40;
+    const rowH = taken.length ? Math.min(84, (H - 330) / taken.length) : 0;
+    const ch = taken.length ? 112 + taken.length * (rowH + 10) + 16 : 200;
+    const card = this.add.container(W / 2, H / 2);
+    const g = this.add.graphics();
+    g.fillStyle(0x000000, 0.28).fillRoundedRect(-cw / 2, -ch / 2 + 8, cw, ch, 26);
+    g.fillStyle(COLORS.coin, 1).fillRoundedRect(-cw / 2, -ch / 2, cw, ch, 26);
+    g.fillStyle(0xfff6ea, 1).fillRoundedRect(-cw / 2 + 5, -ch / 2 + 5, cw - 10, ch - 10, 22);
+    card.add(g);
+    card.add(this.add.zone(0, 0, cw, ch).setInteractive()); // taps on the card itself don't close it
+    card.add(label(this, 0, -ch / 2 + 46, '★ Active Perks', 32, COLORS.ink, true).setOrigin(0.5));
+    card.add(label(this, 0, -ch / 2 + 82, 'Perks you have picked this shift', 16, 0x6b6e8a).setOrigin(0.5));
+
+    if (!taken.length) {
+      card.add(label(this, 0, -ch / 2 + 140, "None yet. Keep delivering and\nyou'll get to pick one soon!", 17, COLORS.ink, false).setOrigin(0.5));
+    }
+    taken.forEach(({ perk, level }, i) => {
+      const y = -ch / 2 + 112 + i * (rowH + 10);
+      const icon = PERK_ICONS[perk.id] ?? { glyph: '?', color: COLORS.coin };
+      const rare = perk.rarity === 'rare';
+      const rg = this.add.graphics();
+      rg.fillStyle(rare ? 0xfff0c2 : 0xf3ece2, 1).fillRoundedRect(-cw / 2 + 18, y, cw - 36, rowH, 16);
+      const ir = Math.min(26, rowH / 2 - 8);
+      rg.fillStyle(icon.color, 1).fillCircle(-cw / 2 + 24 + ir + 6, y + rowH / 2, ir);
+      rg.fillStyle(0xffffff, 0.25).fillCircle(-cw / 2 + 24 + ir, y + rowH / 2 - ir * 0.35, ir * 0.4);
+      card.add(rg);
+      card.add(label(this, -cw / 2 + 30 + ir, y + rowH / 2, icon.glyph, Math.round(ir * 0.9), 0xffffff, true).setOrigin(0.5));
+      const tx = -cw / 2 + 44 + ir * 2;
+      const name = perk.name + (level > 1 ? `  Lv ${level}` : '');
+      card.add(label(this, tx, y + rowH / 2 - 2, name, 19, COLORS.ink, true).setOrigin(0, 1).setAlign('left'));
+      card.add(label(this, tx, y + rowH / 2 + 2, perk.desc, 14, 0x5c5f7a, false, cw / 2 - tx - 30).setOrigin(0, 0).setAlign('left'));
+      if (rare) card.add(label(this, cw / 2 - 30, y + 8, 'RARE', 12, COLORS.coinDark, true).setOrigin(1, 0));
+    });
+
+    // Close button, top right.
+    const close = pillButton(this, cw / 2 - 34, -ch / 2 + 34, 44, 40, 0xfff6ea, 0xe2cdb6, () => this.unpause());
+    close.add(label(this, 0, 0, '✕', 22, COLORS.ink, true).setOrigin(0.5));
+    card.add(close);
+
+    c.add(card);
+    pin(c);
+  }
+
+  /** Freeze the shift behind a "Paused" card. */
+  private pause(): void {
+    if (this.phase === 'paused') return;
+    const c = this.freeze();
     const card = this.add.container(W / 2, H / 2);
     const g = this.add.graphics();
     g.fillStyle(0x000000, 0.28).fillRoundedRect(-150, -100 + 8, 300, 200, 28);

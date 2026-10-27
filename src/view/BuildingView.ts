@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { DPR, FONT, GROUND_Y, HUD_H, Layout, W, floorLabel } from './Layout';
 import { COLORS, FLOOR_COLORS, hex } from './Palette';
 import type { RoomTheme } from './rooms';
+import { driftCloud } from './ui';
 
 /** Static building art (one themed room per floor) plus plaques and tap flashes. */
 export class BuildingView {
@@ -16,7 +17,7 @@ export class BuildingView {
     const right = W - 16;
     const top = layout.floorY(floors) - 4;
 
-    this.drawSky(top - 14);
+    this.drawSky(top - 14, !layout.scrolls);
 
     // Roof
     g.fillStyle(COLORS.cabFrame, 1).fillRoundedRect(left - 6, top - 14, right - left + 12, 18, 6);
@@ -90,15 +91,16 @@ export class BuildingView {
    * Night sky above the roof. Floors stop growing at MAX_FLOOR_H, so on tall phones a
    * short tower leaves open space under the HUD: fill it with the menu's skyline,
    * a moon and stars, plus an antenna and water tank on our roof. Room to grow.
+   * When the tower fits on screen the HUD has no panel, so the sky runs up behind it.
    */
-  private drawSky(roof: number): void {
+  private drawSky(roof: number, fits: boolean): void {
     const scene = this.scene;
     const rnd = new Phaser.Math.RandomDataGenerator(['going-up-sky']);
     const skyTop = Math.min(0, roof - 300);
-    const open = roof - HUD_H; // visible sky between HUD and roof when the camera is at rest
+    const open = roof - HUD_H; // sky below the HUD row when the camera is at rest
     const g = scene.add.graphics().setDepth(-1);
-    // Flat night behind the HUD panel, so the gradient starts exactly where the panel ends.
-    const fade = Math.min(HUD_H, roof - 40);
+    // The gradient starts at the top of the screen, or where a tall tower's HUD panel ends.
+    const fade = fits ? 0 : Math.min(HUD_H, roof - 40);
     g.fillStyle(COLORS.night, 1).fillRect(0, skyTop, W, fade - skyTop);
     g.fillGradientStyle(COLORS.night, COLORS.night, 0x33365a, 0x33365a, 1).fillRect(0, fade, W, roof - fade);
 
@@ -110,23 +112,24 @@ export class BuildingView {
       g.fillStyle(0xffe9c7, 1).fillCircle(W - 86, my, 21);
       g.fillStyle(0xf3d9b1, 1).fillCircle(W - 92, my - 5, 4).fillCircle(W - 80, my + 7, 3);
 
-      // Clouds, as on the menu.
-      const cloud = (x: number, y: number, s: number) => {
-        g.fillStyle(0x3a3e62, 1);
-        g.fillCircle(x, y, 18 * s).fillCircle(x + 20 * s, y - 8 * s, 22 * s).fillCircle(x + 42 * s, y, 16 * s);
-        g.fillRoundedRect(x - 18 * s, y, 76 * s, 16 * s, 8 * s);
-      };
-      cloud(40, HUD_H + open * 0.28, 1);
-      if (open > 160) cloud(W * 0.45, HUD_H + open * 0.55, 0.8);
+    }
 
-      // Stars, a few of them twinkling.
-      for (let i = 0; i < Math.min(18, Math.floor(open / 14)); i++) {
-        const sx = rnd.between(12, W - 12);
-        const sy = rnd.between(HUD_H + 6, roof - 70);
-        const star = scene.add.circle(sx, sy, rnd.frac() < 0.3 ? 2 : 1.3, 0xffe9c7, 0.4 + rnd.frac() * 0.5).setDepth(-1);
-        if (i % 3 === 0)
-          scene.tweens.add({ targets: star, alpha: 0.15, duration: 800 + rnd.between(0, 900), yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-      }
+    // Clouds, as on the menu, drifting right to left (smaller ones a touch slower, so they feel further away).
+    const cloud = (x: number, y: number, s: number) => driftCloud(scene, x, y, s, 9 * s).setDepth(-1);
+    if (open > 60) cloud(40, HUD_H + open * 0.28, 1);
+    if (open > 160) cloud(W * 0.45, HUD_H + open * 0.55, 0.8);
+    if (fits) cloud(W * 0.7, 34, 0.75); // behind the HUD row
+
+    // Stars wherever there's sky showing, a few of them twinkling.
+    const starTop = fits ? 10 : HUD_H + 6;
+    const starBottom = roof - 40;
+    const stars = Math.min(24, Math.floor((starBottom - starTop) / 12));
+    for (let i = 0; i < stars; i++) {
+      const sx = rnd.between(12, W - 12);
+      const sy = rnd.between(starTop, starBottom);
+      const star = scene.add.circle(sx, sy, rnd.frac() < 0.3 ? 2 : 1.3, 0xffe9c7, 0.4 + rnd.frac() * 0.5).setDepth(-1);
+      if (i % 3 === 0)
+        scene.tweens.add({ targets: star, alpha: 0.15, duration: 800 + rnd.between(0, 900), yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     }
 
     // Distant towers peeking up behind ours, with a scatter of lit windows.

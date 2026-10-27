@@ -381,6 +381,24 @@ describe('menu demo to live shift', () => {
   });
 });
 
+describe('perk xp', () => {
+  it('draft progress counts deliveries towards the next draft, then restarts from it after a pick', () => {
+    // Arrange: first draft at 4 deliveries, then a gap of 6
+    const w = makeWorld({ draft: { ...DEFAULT_CONFIG.draft, first: 4, gap: 6, gapGrowth: 0 } });
+    w.delivered = 3;
+    expect(w.draftProgress).toEqual({ done: 3, need: 4 });
+
+    // Act: reach the threshold, take the offered perk, deliver two more
+    w.delivered = 4;
+    run(w, 0.1);
+    w.choosePerk(w.offer![0].id);
+    w.delivered = 6;
+
+    // Assert: progress is measured from the last draft (4) to the next (10)
+    expect(w.draftProgress).toEqual({ done: 2, need: 6 });
+  });
+});
+
 describe('hold controls', () => {
   it('a quick tap of up from rest moves exactly one floor', () => {
     const w = makeWorld();

@@ -1,7 +1,31 @@
 import Phaser from 'phaser';
-import { DPR, FONT } from './Layout';
+import { DPR, FONT, W } from './Layout';
 import { COLORS, hex, lerpColor } from './Palette';
 import { sfx } from './Sfx';
+
+/**
+ * A puffy night cloud that drifts slowly right to left, forever: once it has
+ * left the screen on the left it comes back in from the right.
+ */
+export function driftCloud(scene: Phaser.Scene, x: number, y: number, s: number, speed = 8): Phaser.GameObjects.Graphics {
+  const g = scene.add.graphics({ x, y });
+  g.fillStyle(0x3a3e62, 1);
+  g.fillCircle(0, 0, 18 * s).fillCircle(20 * s, -8 * s, 22 * s).fillCircle(42 * s, 0, 16 * s);
+  g.fillRoundedRect(-18 * s, 0, 76 * s, 16 * s, 8 * s);
+  const offLeft = -60 * s;
+  const go = () =>
+    scene.tweens.add({
+      targets: g,
+      x: offLeft,
+      duration: ((g.x - offLeft) / speed) * 1000,
+      onComplete: () => {
+        g.x = W + 20 * s;
+        go();
+      },
+    });
+  go();
+  return g;
+}
 
 export interface ButtonOpts {
   color?: number;

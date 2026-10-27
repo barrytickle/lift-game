@@ -101,7 +101,7 @@ export class World {
     if (this.over) return;
     if (this.offer) return; // paused for a perk draft
     if (this.delivered >= this.nextDraftAt) {
-      this.offer = drawPerks(this.rng, this.cfg.draft.choices, this.perks);
+      this.offer = drawPerks(this.rng, this.cfg.draft.choices, this.perks, this);
       this.events.emit('draft', { offer: this.offer });
       return;
     }
@@ -119,6 +119,23 @@ export class World {
 
     const stopped = this.lift.stoppedAt;
     if (stopped !== null) this.tickTransfers(stopped, dt);
+  }
+
+  /**
+   * Turn the menu demo into a real shift without a cut: the caller restores the
+   * live config first, then counters reset and everyone already in the building
+   * gets their full patience back.
+   */
+  startShift(): void {
+    this.time = 0;
+    this.score = 0;
+    this.delivered = 0;
+    this.lives = this.maxLives = this.cfg.lives;
+    this.over = false;
+    this.nextDraftAt = this.cfg.draft.first;
+    this.draftsTaken = 0;
+    this.spawnTimer = Math.min(this.spawnTimer, this.cfg.spawn.startInterval);
+    for (const p of this.passengers.values()) p.patience = p.maxPatience;
   }
 
   /** Resolve the pending draft. Ignored if `id` wasn't on offer. */
@@ -149,6 +166,30 @@ export class World {
     const s = new Set<number>();
     for (const id of this.lift.riders) s.add(this.passengers.get(id)!.dest);
     return s;
+  }
+
+  /** Floors where stopping does something: a rider gets off, or someone waiting can get on. */
+  usefulFloors(): Set<number> {
+    const s = this.requestedFloors();
+    if (!this.lift.isFull) this.queues.forEach((q, f) => q.length > 0 && s.add(f));
+    return s;
+  }
+
+  /** Hall calls per floor with people waiting: which way they want to go and how close to walking out (0..1). */
+  calls(): { floor: number; up: boolean; down: boolean; urgency: number; count: number }[] {
+    const out = [];
+    for (let f = 0; f < this.queues.length; f++) {
+      const q = this.queues[f].map((id) => this.passengers.get(id)!);
+      if (q.length === 0) continue;
+      out.push({
+        floor: f,
+        up: q.some((p) => p.dest > f),
+        down: q.some((p) => p.dest < f),
+        urgency: Math.max(...q.map((p) => 1 - p.patience / p.maxPatience)),
+        count: q.length,
+      });
+    }
+    return out;
   }
 
   private tickSpawning(dt: number): void {

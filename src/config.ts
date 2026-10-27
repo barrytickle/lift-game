@@ -59,7 +59,7 @@ export interface GameConfig {
 export const DEFAULT_CONFIG: GameConfig = {
   floors: 5,
   lift: {
-    capacity: 4,
+    capacity: 1, // one seat to start; Bigger Cab (shop) and Roomy Cab (perk) add more
     maxSpeed: 3.4,
     accel: 10,
     transferInterval: 0.16,
@@ -71,8 +71,8 @@ export const DEFAULT_CONFIG: GameConfig = {
   },
   spawn: {
     firstDelay: 0.6,
-    startInterval: 3.0,
-    minInterval: 0.9,
+    startInterval: 4.6,
+    minInterval: 1.4,
     rampTime: 180,
     overtimeHalfLife: 150,
     floorInterval: 0.3,

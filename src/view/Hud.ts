@@ -45,6 +45,12 @@ export class Hud {
     this.root.setVisible(on);
   }
 
+  /** Appear when the menu window has grown into the live game. */
+  fadeIn(): void {
+    this.root.setVisible(true).setAlpha(0);
+    this.scene.tweens.add({ targets: this.root, alpha: 1, duration: 350 });
+  }
+
   /** Redraw the heart row; grows when perks add hearts. */
   setLives(lives: number, max: number): void {
     const cy = HUD_H / 2 - 8;

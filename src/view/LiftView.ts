@@ -14,12 +14,16 @@ export class LiftView {
   private doors: Phaser.GameObjects.Graphics;
   private cable: Phaser.GameObjects.Graphics;
   private marker: Phaser.GameObjects.Triangle;
+  private glow: Phaser.GameObjects.Graphics;
+  private glowAmt = 0;
+  private t = 0;
   private open = 0; // 0 closed .. 1 open
   private lastVel = 0;
 
   constructor(private scene: Phaser.Scene, private layout: Layout, skin: CabSkin) {
     const { cabW, cabH } = layout;
     this.cable = scene.add.graphics().setDepth(2);
+    this.glow = scene.add.graphics().setDepth(2.5);
 
     this.cab = scene.add.container(layout.shaftX, layout.floorY(0)).setDepth(DEPTH_CAB);
     const g = scene.add.graphics();
@@ -43,10 +47,13 @@ export class LiftView {
     return this.cab.y;
   }
 
-  update(dt: number, lift: Lift): void {
+  /** `useful`: floors where stopping does something; the cab glows green as it lines up with one. */
+  update(dt: number, lift: Lift, useful: Set<number>): void {
     const { layout } = this;
     const y = layout.floorY(lift.position);
     this.cab.y = y;
+    this.t += dt;
+    this.drawGlow(dt, lift.position, useful, y);
 
     // Squash a touch on hard stops for weight.
     if (this.lastVel !== 0 && lift.velocity === 0) {
@@ -71,6 +78,23 @@ export class LiftView {
     } else {
       this.marker.alpha = Math.max(0, this.marker.alpha - dt * 6);
     }
+  }
+
+  private drawGlow(dt: number, pos: number, useful: Set<number>, y: number): void {
+    let d = Infinity;
+    for (const f of useful) d = Math.min(d, Math.abs(pos - f));
+    // Full glow on the floor, fading out by a third of a floor away: release ▲/▼ as it lights up.
+    const want = Phaser.Math.Clamp(1 - d / 0.35, 0, 1);
+    this.glowAmt += (want - this.glowAmt) * Math.min(1, dt * 14);
+    const g = this.glow;
+    g.clear();
+    if (this.glowAmt < 0.02) return;
+    const { cabW, cabH, shaftX } = this.layout;
+    const a = this.glowAmt * (0.85 + 0.15 * Math.sin(this.t * 6));
+    for (const [pad, alpha] of [[18, 0.25], [11, 0.4], [5, 0.6]]) {
+      g.fillStyle(COLORS.happy, alpha * a).fillRoundedRect(shaftX - cabW / 2 - 4 - pad, y - cabH - 4 - pad, cabW + 8 + pad * 2, cabH + 6 + pad * 2, 12 + pad);
+    }
+    g.lineStyle(4, 0x8ff0a8, a).strokeRoundedRect(shaftX - cabW / 2 - 7, y - cabH - 7, cabW + 14, cabH + 12, 14);
   }
 
   private drawDoors(y: number): void {

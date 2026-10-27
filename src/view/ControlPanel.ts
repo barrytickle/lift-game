@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { Lift } from '../sim/Lift';
 import { DPR, FONT, GROUND_Y, H, Layout, floorLabel } from './Layout';
+import { callColor, type Call } from './CallsView';
 import { sfx } from './Sfx';
 import { pin } from './ui';
 
@@ -23,11 +24,14 @@ export class ControlPanel {
   private arrow: Phaser.GameObjects.Text;
   private lights: Phaser.GameObjects.Arc[] = [];
   private buttons: Phaser.GameObjects.Container[] = [];
+  /** pulsing rings round ▼ / ▲ when someone is waiting below / above */
+  private hints: Phaser.GameObjects.Graphics[] = [];
+  private t = 0;
   /** pointer id holding a button (-1 = keyboard), so another finger can't cancel it */
   private holder: number | null = null;
   private root: Phaser.GameObjects.Container;
 
-  constructor(scene: Phaser.Scene, layout: Layout, private handlers: PanelHandlers) {
+  constructor(private scene: Phaser.Scene, layout: Layout, private handlers: PanelHandlers) {
     const pw = layout.shaftW + 32;
     const top = GROUND_Y + 14;
     const ph = H - top - 8;
@@ -74,7 +78,9 @@ export class ControlPanel {
       .text(0, 0, dir > 0 ? '▲' : '▼', { fontFamily: FONT, fontSize: '22px', fontStyle: 'bold', color: '#2b2d42' })
       .setOrigin(0.5)
       .setResolution(DPR * 2);
-    b.add([ring, face, light, t]);
+    const hint = scene.add.graphics();
+    this.hints.push(hint);
+    b.add([hint, ring, face, light, t]);
     this.lights.push(light);
     this.buttons.push(b);
     // Generous hit area, bigger than the drawn disc.
@@ -115,7 +121,24 @@ export class ControlPanel {
     this.root.setVisible(on);
   }
 
-  update(lift: Lift): void {
+  /** Appear when the menu window has grown into the live game. */
+  fadeIn(): void {
+    this.root.setVisible(true).setAlpha(0);
+    this.scene.tweens.add({ targets: this.root, alpha: 1, duration: 350 });
+  }
+
+  update(dt: number, lift: Lift, calls: Call[]): void {
+    this.t += dt;
+    const above = calls.filter((c) => c.floor > lift.position + 0.01);
+    const below = calls.filter((c) => c.floor < lift.position - 0.01);
+    [below, above].forEach((cs, i) => {
+      const g = this.hints[i];
+      g.clear();
+      if (!cs.length) return;
+      const worst = Math.max(...cs.map((c) => c.urgency));
+      const p = 0.5 + 0.5 * Math.sin(this.t * (worst >= 0.6 ? 12 : 6));
+      g.lineStyle(5, callColor(worst), 0.45 + 0.55 * p).strokeCircle(0, 1, 31 + p * 3);
+    });
     this.display.setText(floorLabel(Math.round(lift.position)));
     this.arrow.setText(lift.velocity > 0.05 ? '▲' : lift.velocity < -0.05 ? '▼' : '');
   }

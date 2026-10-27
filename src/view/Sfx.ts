@@ -2,9 +2,29 @@
 
 type Wave = OscillatorType;
 
+const MUTE_KEY = 'going-up-muted';
+
+function readMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export class Sfx {
   private ctx: AudioContext | null = null;
-  muted = false;
+  muted = readMuted();
+
+  /** Mute toggle from the menu; remembered between visits. */
+  setMuted(on: boolean): void {
+    this.muted = on;
+    try {
+      localStorage.setItem(MUTE_KEY, on ? '1' : '0');
+    } catch {
+      // private mode: the toggle still works for this visit
+    }
+  }
 
   /** Must be called from a user gesture (first tap) to satisfy autoplay rules. */
   unlock(): void {

@@ -63,15 +63,15 @@ describe('boarding and delivery', () => {
   });
 
   it('never boards more than capacity', () => {
-    const w = makeWorld();
+    const w = makeWorld({ lift: { ...DEFAULT_CONFIG.lift, capacity: 4 } });
     for (let i = 0; i < 6; i++) w.spawnPassenger(0, 2);
     run(w, 2);
-    expect(w.lift.riders).toHaveLength(DEFAULT_CONFIG.lift.capacity);
+    expect(w.lift.riders).toHaveLength(4);
     expect(w.queues[0]).toHaveLength(2);
   });
 
   it('lets riders off before new passengers board', () => {
-    const w = makeWorld();
+    const w = makeWorld({ lift: { ...DEFAULT_CONFIG.lift, capacity: 4 } });
     for (let i = 0; i < 4; i++) w.spawnPassenger(0, 2);
     run(w, 1);
     expect(w.lift.isFull).toBe(true);
@@ -85,7 +85,7 @@ describe('boarding and delivery', () => {
   });
 
   it('pays a growing group bonus for drop-offs at the same stop', () => {
-    const w = makeWorld();
+    const w = makeWorld({ lift: { ...DEFAULT_CONFIG.lift, capacity: 4 } });
     w.spawnPassenger(0, 1);
     w.spawnPassenger(0, 1);
     run(w, 1);
@@ -96,6 +96,42 @@ describe('boarding and delivery', () => {
     expect(drops.map((d) => d.groupIndex)).toEqual([0, 1]);
     // Patience bonus may differ by a rounding coin; the group bonus dominates.
     expect(drops[1].coins - drops[0].coins).toBeGreaterThanOrEqual(DEFAULT_CONFIG.scoring.groupBonus - 1);
+  });
+});
+
+describe('starting cab', () => {
+  it('seats one passenger at a time until upgraded', () => {
+    const w = makeWorld();
+    w.spawnPassenger(0, 2);
+    w.spawnPassenger(0, 3);
+    run(w, 1);
+    expect(w.lift.riders).toHaveLength(1);
+    expect(w.queues[0]).toHaveLength(1);
+  });
+});
+
+describe('lift hints', () => {
+  it('useful floors are drop-offs, plus pickups only while there is a free seat', () => {
+    const w = makeWorld();
+    w.spawnPassenger(0, 3);
+    run(w, 0.5);
+    w.spawnPassenger(2, 4);
+    expect([...w.usefulFloors()]).toEqual([3]); // cab full: floor 2 can't board
+    w.requestFloor(3);
+    run(w, 3);
+    expect([...w.usefulFloors()]).toEqual([2]);
+  });
+
+  it('calls report direction, head count and the most impatient waiter', () => {
+    const w = makeWorld();
+    w.requestFloor(4);
+    run(w, 2);
+    w.spawnPassenger(2, 4);
+    run(w, 5);
+    w.spawnPassenger(2, 0);
+    const [c] = w.calls();
+    expect(c).toMatchObject({ floor: 2, up: true, down: true, count: 2 });
+    expect(c.urgency).toBeCloseTo(5 / DEFAULT_CONFIG.passengers.patience, 1);
   });
 });
 
@@ -143,6 +179,47 @@ describe('spawning', () => {
     run(w, 200, 1 / 30);
     expect(w.spawnInterval()).toBeLessThan(early);
     for (const q of w.queues) expect(q.length).toBeLessThanOrEqual(DEFAULT_CONFIG.passengers.maxWaitingPerFloor);
+  });
+});
+
+describe('menu demo to live shift', () => {
+  it('startShift resets counters and refills patience but keeps the building as it is', () => {
+    // Arrange: a demo world with infinite lives and no drafts, run for a while
+    const w = makeWorld({ draft: { ...DEFAULT_CONFIG.draft, first: Infinity } });
+    w.lives = Infinity;
+    w.spawnPassenger(0, 2);
+    run(w, 1);
+    w.requestFloor(2);
+    run(w, 3);
+    const waiting = w.spawnPassenger(3, 0)!;
+    run(w, 5);
+    expect(w.delivered).toBe(1);
+    expect(waiting.patience).toBeLessThan(waiting.maxPatience);
+
+    // Act: restore the live config, then go live
+    w.cfg.draft.first = DEFAULT_CONFIG.draft.first;
+    w.startShift();
+
+    // Assert
+    expect(w.score).toBe(0);
+    expect(w.delivered).toBe(0);
+    expect(w.time).toBe(0);
+    expect(w.lives).toBe(DEFAULT_CONFIG.lives);
+    expect(w.maxLives).toBe(DEFAULT_CONFIG.lives);
+    expect(waiting.patience).toBe(waiting.maxPatience);
+    expect(w.queues[3]).toEqual([waiting.id]);
+    expect(w.lift.position).toBe(2);
+  });
+
+  it('after startShift the first draft comes at the live threshold', () => {
+    const w = makeWorld({ draft: { ...DEFAULT_CONFIG.draft, first: Infinity } });
+    w.cfg.draft.first = 1;
+    w.startShift();
+    w.spawnPassenger(0, 1);
+    run(w, 0.5);
+    w.requestFloor(1);
+    run(w, 3);
+    expect(w.offer).not.toBeNull();
   });
 });
 

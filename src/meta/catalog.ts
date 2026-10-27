@@ -15,7 +15,7 @@ export interface ShopItem {
 export const UPGRADES: ShopItem[] = [
   { id: 'motor', kind: 'upgrade', name: 'Better Motor', desc: 'Lift is 10% faster per level', costs: [500, 1200, 2500] },
   { id: 'music', kind: 'upgrade', name: 'Calming Music', desc: 'Passengers 10% more patient per level', costs: [700, 1800, 3500] },
-  { id: 'capacity', kind: 'upgrade', name: 'Bigger Cab', desc: '+1 seat in the lift per level', costs: [1500, 4000] },
+  { id: 'capacity', kind: 'upgrade', name: 'Bigger Cab', desc: '+1 seat in the lift per level', costs: [250, 900, 2000] },
   { id: 'heart', kind: 'upgrade', name: 'Spare Heart', desc: '+1 heart per level', costs: [2000, 5000] },
   { id: 'headstart', kind: 'upgrade', name: 'Head Start', desc: 'Free perk pick when the shift begins', costs: [1200] },
   { id: 'lucky', kind: 'upgrade', name: 'Lucky Draw', desc: 'Perk drafts show 4 cards', costs: [3000] },

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GameScene } from './scenes/GameScene';
+import { MenuBackScene, MenuFrontScene } from './scenes/MenuScene';
 import { ShopScene } from './scenes/ShopScene';
 import { DPR, H, W } from './view/Layout';
 import { COLORS } from './view/Palette';
@@ -16,7 +17,7 @@ const game = new Phaser.Game({
     height: H * DPR,
   },
   input: { activePointers: 2 },
-  scene: [GameScene, ShopScene],
+  scene: [GameScene, MenuBackScene, MenuFrontScene, ShopScene],
 });
 
 document.addEventListener('contextmenu', (e) => e.preventDefault());

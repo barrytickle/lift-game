@@ -15,14 +15,15 @@
 - A session feels complete at roughly 3–5 minutes for an average player.
 
 ## MVP: what must exist to be the game
-- 5 floors, 1 tap-controlled lift (capacity 4) with smooth accel/brake, retargetable mid-trip
+- 5 floors, 1 lift with smooth accel/brake, retargetable mid-trip. Starts with **one seat** to ease players in; Bigger Cab (shop, first level 250) and Roomy Cab (perk) add seats
+- Readability: hall-call lamps light ▲/▼ on floors with people waiting (red and pulsing when someone is close to leaving), the panel buttons ring when calls are above/below, off-screen calls show as tappable chips, and the cab glows green when lined up with a floor where stopping helps
 - Passenger spawning with destinations and a visible patience ring
 - Automatic exit-then-board at stops, one person at a time
 - Coins (base + patience bonus + group bonus), hearts, game over, best score
 - Expressive procedural passengers: mood faces, blinking, hopping, cheering, fuming
 - Perk drafts: ~9 stackable perks, common/rare, offered at growing delivery milestones
 - Shop with permanent upgrades, unlockable room themes (Tiny Tower-style floors), cab skins, hat packs
-- Main menu shows the tower running on autopilot at a calm, constant pace
+- Main menu shows the tower running on autopilot at a calm, constant pace, framed in a window between the logo and the menu card; Start Shift grows the window into the live game (same tower, same passengers)
 - Every floor drawn as a themed room; floors 1+ are dealt randomly from the rooms you own each shift.
   Rooms: Lobby (always G); free: Apartment, Office, Coffee Shop, Gym; shop: Laundry Room, Plant Shop,
   Restaurant, Arcade, Cinema Room, Game Dev Studio

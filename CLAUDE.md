@@ -20,7 +20,13 @@ This project uses a trimmed copy of the Game Studios framework (from `C:\Users\B
   shift's config copy from the permanent upgrades; perks then mutate that copy during the shift.
 - `src/view/`: Phaser-only presentation that reads sim state every frame and reacts to events.
 - `src/view/rooms.ts`: procedurally drawn floor themes. `view/ControlPanel.ts`: brass hold-to-move ▲/▼ panel.
+- `src/view/CallsView.ts`: "someone's waiting" signals: hall-call lamps per floor and off-screen chips
+  (from `World.calls()`). The panel buttons ring when calls are above/below; the cab glows green near a
+  `World.usefulFloors()` floor.
 - `src/scenes/GameScene.ts`: wires sim to views, handles input, overlays, perk cards and view lifecycle.
+  `MenuScene.ts`: the main menu as two layers around GameScene (`menu-back` below: skyline, logo, card;
+  `menu-front` above: window frame, mute). GameScene runs the autopilot demo in a camera viewport between
+  them and grows it to full screen on Start Shift, then `World.startShift()` turns the demo into the live shift.
   `ShopScene.ts`: spend banked coins (Upgrades / Rooms / Style tabs).
 - `tests/`: Vitest on the sim. `tools/balance.ts`: headless bot that plays many shifts.
 

@@ -11,6 +11,8 @@ export interface Perk {
   desc: string;
   rarity: Rarity;
   max: number;
+  /** only offered while this holds, e.g. group bonuses need a second seat */
+  requires?: (w: World) => boolean;
   apply(w: World): void;
 }
 
@@ -79,6 +81,7 @@ export const PERKS: Perk[] = [
     desc: 'Group drop-off bonus +5',
     rarity: 'rare',
     max: 3,
+    requires: (w) => w.lift.capacity > 1,
     apply: (w) => void (w.cfg.scoring.groupBonus += 5),
   },
   {
@@ -118,9 +121,9 @@ export function perkById(id: string): Perk | undefined {
   return id === COIN_BAG.id ? COIN_BAG : PERKS.find((p) => p.id === id);
 }
 
-/** Weighted draw of `n` different perks that aren't maxed yet. */
-export function drawPerks(rng: () => number, n: number, taken: Record<string, number>): Perk[] {
-  const pool = PERKS.filter((p) => (taken[p.id] ?? 0) < p.max);
+/** Weighted draw of `n` different perks that aren't maxed yet (and suit world `w`, if given). */
+export function drawPerks(rng: () => number, n: number, taken: Record<string, number>, w?: World): Perk[] {
+  const pool = PERKS.filter((p) => (taken[p.id] ?? 0) < p.max && (!w || !p.requires || p.requires(w)));
   const out: Perk[] = [];
   while (out.length < n && pool.length > 0) {
     const total = pool.reduce((s, p) => s + WEIGHT[p.rarity], 0);

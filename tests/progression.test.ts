@@ -52,7 +52,7 @@ describe('perk drafts', () => {
     w.offer = [PERKS.find((p) => p.id === 'roomy')!];
     w.choosePerk('roomy');
     expect(w.lift.capacity).toBe(DEFAULT_CONFIG.lift.capacity + 1);
-    expect(DEFAULT_CONFIG.lift.capacity).toBe(4);
+    expect(DEFAULT_CONFIG.lift.capacity).toBe(1);
   });
 
   it('ignores a pick that was not on offer', () => {
@@ -69,6 +69,17 @@ describe('perk drafts', () => {
 
     const allMaxed = Object.fromEntries(PERKS.map((p) => [p.id, p.max]));
     expect(drawPerks(Math.random, 3, allMaxed)).toEqual([COIN_BAG]);
+  });
+
+  it('only offers Party Lift once the cab has a second seat', () => {
+    const w = quietWorld();
+    let rolls = 0;
+    const rng = () => (rolls++ * 0.137) % 1;
+    const offered = (world: World) =>
+      Array.from({ length: 50 }, () => drawPerks(rng, 3, {}, world)).some((o) => o.some((p) => p.id === 'party'));
+    expect(offered(w)).toBe(false);
+    w.cfg.lift.capacity = 2;
+    expect(offered(w)).toBe(true);
   });
 });
 
@@ -98,12 +109,12 @@ describe('shop and profile', () => {
     const p = newProfile();
     p.upgrades = { capacity: 2, heart: 1, motor: 3, headstart: 1, lucky: 1 };
     const cfg = runConfig(p);
-    expect(cfg.lift.capacity).toBe(6);
+    expect(cfg.lift.capacity).toBe(3);
     expect(cfg.lives).toBe(6);
     expect(cfg.lift.maxSpeed).toBeCloseTo(DEFAULT_CONFIG.lift.maxSpeed * 1.3);
     expect(cfg.draft.first).toBe(0);
     expect(cfg.draft.choices).toBe(4);
-    expect(DEFAULT_CONFIG.lift.capacity).toBe(4);
+    expect(DEFAULT_CONFIG.lift.capacity).toBe(1);
   });
 
   it('banks shift coins and tracks the best', () => {

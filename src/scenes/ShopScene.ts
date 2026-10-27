@@ -109,14 +109,23 @@ export class ShopScene extends Phaser.Scene {
     const tx = 24 + thumbW;
     const level = itemLevel(p, item);
     const cost = nextCost(p, item);
-    c.add(label(this, tx, h / 2 - 2, item.name, 19, COLORS.ink, true).setOrigin(0, 1).setAlign('left'));
-    c.add(label(this, tx, h / 2 + 2, item.desc, 14, 0x6b6e8a, false, w - tx - 118).setOrigin(0, 0).setAlign('left'));
+    // Pips, name and description are stacked and centred as one block. On short
+    // rows (16:9 phones) a two-line description shrinks until it fits the card.
+    const pipH = item.costs.length > 1 ? 11 : 0;
+    const name = label(this, tx, 0, item.name, 19, COLORS.ink, true).setOrigin(0, 0).setAlign('left');
+    const desc = label(this, tx, 0, item.desc, 14, 0x6b6e8a, false, w - tx - 118).setOrigin(0, 0).setAlign('left');
+    const blockH = () => pipH + name.height + desc.height;
+    for (let size = 13; size >= 11 && blockH() > h - 10; size--) desc.setFontSize(size).setLineSpacing(2);
+    const y0 = Math.round((h - blockH()) / 2);
+    name.setY(y0 + pipH);
+    desc.setY(name.y + name.height);
+    c.add([name, desc]);
 
     // Level pips for multi-level upgrades
-    if (item.costs.length > 1) {
+    if (pipH) {
       const pg = this.add.graphics();
       for (let i = 0; i < item.costs.length; i++)
-        pg.fillStyle(i < level ? COLORS.happy : 0xe0dbe8, 1).fillRoundedRect(tx + i * 18, 10, 14, 6, 3);
+        pg.fillStyle(i < level ? COLORS.happy : 0xe0dbe8, 1).fillRoundedRect(tx + i * 18, y0, 14, 6, 3);
       c.add(pg);
     }
 

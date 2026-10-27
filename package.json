@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "balance": "vite-node tools/balance.ts",
     "android:sync": "npm run build && cap sync android",
-    "android:apk": "npm run android:sync && cd android && gradlew.bat assembleDebug",
+    "android:apk": "npm run android:sync && cd android && .\\gradlew.bat assembleDebug",
     "android:install": "adb install -r android/app/build/outputs/apk/debug/app-debug.apk"
   },
   "dependencies": {

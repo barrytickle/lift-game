@@ -22,7 +22,10 @@ export const COLORS = {
 };
 
 /** One colour per floor; destination badges and floor plaques share it. */
-export const FLOOR_COLORS = [0xff8c69, 0xf2b630, 0x4fbf9f, 0x5aa9e6, 0xa78bfa, 0xf472b6, 0x22d3ee, 0x84cc16];
+export const FLOOR_COLORS = [
+  0xff8c69, 0xf2b630, 0x4fbf9f, 0x5aa9e6, 0xa78bfa, 0xf472b6,
+  0x22d3ee, 0x84cc16, 0xfb923c, 0x2dd4bf, 0x818cf8, 0xe879f9,
+];
 
 export interface CabSkin {
   frame: number;

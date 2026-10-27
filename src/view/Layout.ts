@@ -12,6 +12,9 @@ export const HUD_H = 112;
 export const PANEL_H = 106;
 export const GROUND_Y = H - PANEL_H;
 
+/** Floors never get squashed below this; taller towers scroll instead. */
+export const MIN_FLOOR_H = 132;
+
 export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 export class Layout {
@@ -24,7 +27,12 @@ export class Layout {
   readonly queueGap = 50;
 
   constructor(readonly floors: number) {
-    this.floorH = (GROUND_Y - HUD_H - 8) / floors;
+    this.floorH = Math.max(MIN_FLOOR_H, (GROUND_Y - HUD_H - 8) / floors);
+  }
+
+  /** Highest the camera may scroll (negative = up); 0 when the tower fits the screen. */
+  get minScrollY(): number {
+    return Math.min(0, this.floorY(this.floors) - 30 - HUD_H);
   }
 
   /** y of the floor surface for a (possibly fractional) floor index */
@@ -32,9 +40,9 @@ export class Layout {
     return GROUND_Y - f * this.floorH;
   }
 
-  /** floor index for a tap, or null if outside the building */
+  /** floor index for a tap at world y, or null if outside the building */
   floorAt(y: number): number | null {
-    if (y < HUD_H || y > GROUND_Y + 24) return null;
+    if (y < this.floorY(this.floors) || y > GROUND_Y + 24) return null;
     const f = Math.floor((GROUND_Y + 6 - y) / this.floorH);
     return Math.max(0, Math.min(this.floors - 1, f));
   }

@@ -145,3 +145,53 @@ describe('spawning', () => {
     for (const q of w.queues) expect(q.length).toBeLessThanOrEqual(DEFAULT_CONFIG.passengers.maxWaitingPerFloor);
   });
 });
+
+describe('hold controls', () => {
+  it('a quick tap of up from rest moves exactly one floor', () => {
+    const w = makeWorld();
+    w.hold(1);
+    w.update(1 / 60);
+    w.release();
+    run(w, 2);
+    expect(w.lift.stoppedAt).toBe(1);
+  });
+
+  it('holding passes floors without stopping, releasing stops at a floor ahead without reversing', () => {
+    const w = makeWorld();
+    w.hold(1);
+    run(w, 0.8);
+    const atRelease = w.lift.position;
+    expect(atRelease).toBeGreaterThan(1); // went past floor 1 without stopping
+    w.release();
+    let prev = w.lift.position;
+    for (let i = 0; i < 180; i++) {
+      w.update(1 / 60);
+      expect(w.lift.position).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = w.lift.position;
+    }
+    const stop = w.lift.stoppedAt;
+    expect(stop).not.toBeNull();
+    expect(stop!).toBeGreaterThan(atRelease);
+    expect(Number.isInteger(stop)).toBe(true);
+  });
+
+  it('holding stops at the end of the shaft', () => {
+    const w = makeWorld();
+    w.hold(1);
+    run(w, 5);
+    expect(w.lift.stoppedAt).toBe(DEFAULT_CONFIG.floors - 1);
+    w.hold(-1);
+    w.release();
+    run(w, 2);
+    expect(w.lift.stoppedAt).toBe(DEFAULT_CONFIG.floors - 2);
+  });
+
+  it('holding down on the ground floor does nothing', () => {
+    const w = makeWorld();
+    w.hold(-1);
+    run(w, 1);
+    w.release();
+    run(w, 1);
+    expect(w.lift.stoppedAt).toBe(0);
+  });
+});

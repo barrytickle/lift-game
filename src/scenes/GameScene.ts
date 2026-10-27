@@ -1,19 +1,20 @@
 import Phaser from 'phaser';
 import { accessories, bankShift, loadProfile, runConfig, saveProfile, type Profile } from '../meta/profile';
+import { Autopilot } from '../sim/autopilot';
 import type { Perk } from '../sim/perks';
 import { World } from '../sim/World';
 import { BuildingView } from '../view/BuildingView';
 import { ControlPanel } from '../view/ControlPanel';
 import { Hud } from '../view/Hud';
-import { DPR, FONT, H, HUD_H, Layout, W } from '../view/Layout';
+import { DPR, FONT, GROUND_Y, H, HUD_H, Layout, W } from '../view/Layout';
 import { DEPTH_RIDERS, LiftView } from '../view/LiftView';
 import { CAB_SKINS, COLORS, hex } from '../view/Palette';
 import { PassengerView } from '../view/PassengerView';
 import { FREE_ROOMS, LOBBY, roomById, type RoomTheme } from '../view/rooms';
 import { sfx } from '../view/Sfx';
-import { button, label, PERK_ICONS } from '../view/ui';
+import { button, label, PERK_ICONS, pin } from '../view/ui';
 
-// title -> play <-> draft -> over. Title and game over can leave for the shop scene.
+// title (autopilot demo) -> play <-> draft -> over. Title and game over can leave for the shop scene.
 type Phase = 'title' | 'play' | 'draft' | 'over';
 
 const DEPTH_WAITING = 6;
@@ -39,13 +40,20 @@ export class GameScene extends Phaser.Scene {
   private overlay?: Phaser.GameObjects.Container;
   private groupLabel?: Phaser.GameObjects.Text;
   private time_ = 0;
+  /** drives the lift on the main menu */
+  private pilot?: Autopilot;
+  /** room ids for this tower, so "Start shift" keeps the tower you were looking at */
+  private roomIds: string[] = [];
+  private keepRooms?: string[];
 
   constructor() {
     super('game');
   }
 
-  init(data: { skipTitle?: boolean }): void {
+  init(data: { skipTitle?: boolean; rooms?: string[] }): void {
     this.phase = data.skipTitle ? 'play' : 'title';
+    this.keepRooms = data.rooms;
+    this.pilot = undefined;
     this.views = new Map();
     this.leaving = [];
     this.overlay = undefined;
@@ -53,30 +61,77 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setZoom(DPR).centerOn(W / 2, H / 2);
-    this.cameras.main.setBackgroundColor(COLORS.night);
+    // Origin 0,0 so zoom scales from the top-left: world (0,0) is the screen's
+    // top-left at scroll 0, and pinned UI (scroll factor 0) lines up with it.
+    const cam = this.cameras.main;
+    cam.setOrigin(0, 0).setZoom(DPR).setScroll(0, 0);
+    cam.setBackgroundColor(COLORS.night);
 
     this.profile = loadProfile();
     this.accessories = accessories(this.profile);
     const cfg = runConfig(this.profile);
+    // Dev aid: ?floors=10 to try taller towers before they're a real feature.
+    const debugFloors = Number(new URLSearchParams(location.search).get('floors'));
+    if (debugFloors >= 2 && debugFloors <= 12) cfg.floors = debugFloors;
+
+    const attract = this.phase === 'title';
+    if (attract) {
+      // Main-menu demo: a calm, steady trickle that never ramps up, no drafts, no game over.
+      cfg.spawn.rampTime = Infinity;
+      cfg.spawn.startInterval = 2.2;
+      cfg.draft.first = Infinity;
+    }
     this.world = new World(cfg);
+    if (attract) {
+      this.world.lives = Infinity;
+      this.pilot = new Autopilot(0.35);
+    }
+
     this.layout = new Layout(cfg.floors);
-    this.building = new BuildingView(this, this.layout, this.dealRooms(cfg.floors));
+    const rooms = this.dealRooms(cfg.floors);
+    this.roomIds = rooms.map((r) => r.id);
+    this.building = new BuildingView(this, this.layout, rooms);
     this.liftView = new LiftView(this, this.layout, CAB_SKINS[this.profile.cabSkin] ?? CAB_SKINS['skin-classic']);
-    this.panel = new ControlPanel(this, this.layout, (dir) => this.stepLift(dir));
+    this.panel = new ControlPanel(this, this.layout, {
+      hold: (dir) => this.holdLift(dir),
+      release: () => this.world.release(),
+    });
     this.hud = new Hud(this, cfg.lives);
     this.hud.setDelivered(0);
+    this.hud.setVisible(!attract);
+    this.panel.setVisible(!attract);
 
     this.bindWorldEvents();
 
-    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => this.onTap(ptr.worldY));
+    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => this.onTap(ptr));
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => this.onKey(e));
+    this.input.keyboard?.on('keyup', (e: KeyboardEvent) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') this.panel.letGo();
+    });
 
-    if (this.phase === 'title') this.showTitle();
+    cam.scrollY = this.cameraTarget();
+    if (attract) this.showTitle();
+  }
+
+  /** Keep the cab in the middle of the visible floors; 0 (no scroll) when the tower fits. */
+  private cameraTarget(): number {
+    const { layout } = this;
+    const cabMid = this.liftView.cabY - layout.cabH / 2;
+    const bandMid = HUD_H + (GROUND_Y - HUD_H) / 2;
+    return Phaser.Math.Clamp(cabMid - bandMid, layout.minScrollY, 0);
+  }
+
+  /** The main menu's demo runs silently underneath the title. */
+  private get quiet(): boolean {
+    return this.phase === 'title';
   }
 
   /** Lobby on G, then the player's owned rooms shuffled onto the upper floors. */
   private dealRooms(floors: number): RoomTheme[] {
+    if (this.keepRooms?.length === floors) {
+      const kept = this.keepRooms.map((id) => (id === LOBBY.id ? LOBBY : roomById(id)));
+      if (kept.every(Boolean)) return kept as RoomTheme[];
+    }
     const owned = [...FREE_ROOMS, ...this.profile.owned].map(roomById).filter((r): r is RoomTheme => !!r);
     const out: RoomTheme[] = [LOBBY];
     let deck: RoomTheme[] = [];
@@ -95,12 +150,12 @@ export class GameScene extends Phaser.Scene {
       const v = new PassengerView(this, W + 30, layout.floorY(p.origin), p, this.accessories);
       v.setDepth(DEPTH_WAITING);
       this.views.set(p.id, v);
-      sfx.spawn();
+      if (!this.quiet) sfx.spawn();
     });
 
     ev.on('board', ({ p }) => {
       this.views.get(p.id)?.setDepth(DEPTH_RIDERS);
-      sfx.board();
+      if (!this.quiet) sfx.board();
     });
 
     ev.on('deliver', ({ p, floor, coins, groupIndex }) => {
@@ -121,9 +176,9 @@ export class GameScene extends Phaser.Scene {
           }
           this.groupLabel = this.popText(layout.queueX + 130, fy - layout.floorH + 40, `Group x${groupIndex + 1}!`, 0xffffff, 22);
         }
-        this.flyCoin(v.x, v.y - 30);
+        if (!this.quiet) this.flyCoin(v.x, v.y - 30);
       }
-      sfx.coin(groupIndex);
+      if (!this.quiet) sfx.coin(groupIndex);
       this.hud.setScore(this.world.score);
       this.hud.setDelivered(this.world.delivered);
     });
@@ -137,13 +192,16 @@ export class GameScene extends Phaser.Scene {
         this.leaving.push({ view: v, floor });
         this.popText(v.x, v.y - 80, 'Hmph!', COLORS.angry, 22);
       }
+      if (this.quiet) return;
       this.hud.loseLife(livesLeft);
       this.cameras.main.shake(140, 0.006);
       sfx.walkout();
       navigator.vibrate?.(60);
     });
 
-    ev.on('arrive', () => sfx.ding());
+    ev.on('arrive', () => {
+      if (!this.quiet) sfx.ding();
+    });
 
     ev.on('draft', ({ offer }) => {
       this.phase = 'draft';
@@ -156,7 +214,7 @@ export class GameScene extends Phaser.Scene {
       this.hud.setLives(this.world.lives, this.world.maxLives);
       this.hud.setScore(this.world.score);
       const lv = level > 1 ? ` ${level}` : '';
-      this.popText(W / 2, HUD_H + 40, `${perk.name}${lv}!`, PERK_ICONS[perk.id]?.color ?? COLORS.coin, 26);
+      this.popText(W / 2, this.cameras.main.scrollY + HUD_H + 40, `${perk.name}${lv}!`, PERK_ICONS[perk.id]?.color ?? COLORS.coin, 26);
     });
 
     ev.on('gameOver', ({ score, delivered }) => {
@@ -169,29 +227,31 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private onTap(y: number): void {
+  private onTap(ptr: Phaser.Input.Pointer): void {
     sfx.unlock();
     if (this.phase !== 'play') return; // overlays handle their own buttons
-    const f = this.layout.floorAt(y);
+    const screenY = ptr.y / DPR;
+    if (screenY < HUD_H || screenY > GROUND_Y + 10) return; // HUD and control panel
+    const f = this.layout.floorAt(ptr.worldY);
     if (f === null) return;
     this.sendTo(f);
   }
 
   private onKey(e: KeyboardEvent): void {
     if (this.phase === 'title' && e.key === 'Enter') return this.startPlay();
-    if (this.phase !== 'play') return;
+    if (this.phase !== 'play' || e.repeat) return;
     const k = e.key.toLowerCase();
     if (k === 'g' || k === '0') this.sendTo(0);
     else if (/^[1-9]$/.test(k)) this.sendTo(Math.min(Number(k), this.world.cfg.floors - 1));
-    else if (k === 'arrowup') this.stepLift(1);
-    else if (k === 'arrowdown') this.stepLift(-1);
+    else if (k === 'arrowup') this.panel.press(1);
+    else if (k === 'arrowdown') this.panel.press(-1);
   }
 
-  /** ▲/▼: move the lift's destination one floor from wherever it's currently heading. */
-  private stepLift(dir: 1 | -1): void {
+  /** Held ▲/▼ on the panel (or arrow keys): drive until released. */
+  private holdLift(dir: 1 | -1): void {
     if (this.phase !== 'play') return;
-    const f = Phaser.Math.Clamp(this.world.lift.target + dir, 0, this.world.cfg.floors - 1);
-    if (f !== this.world.lift.target) this.sendTo(f);
+    sfx.tap();
+    this.world.hold(dir);
   }
 
   private sendTo(f: number): void {
@@ -203,11 +263,14 @@ export class GameScene extends Phaser.Scene {
   update(_t: number, deltaMs: number): void {
     const dt = Math.min(deltaMs / 1000, 0.05);
     this.time_ += dt;
-    if (this.phase === 'play') this.world.update(dt);
+    if (this.phase === 'play' || this.phase === 'title') this.world.update(dt);
+    if (this.phase === 'title') this.pilot?.update(this.world, dt);
 
     const { world, layout } = this;
     this.liftView.update(dt, world.lift);
     this.panel.update(world.lift);
+    const cam = this.cameras.main;
+    cam.scrollY += (this.cameraTarget() - cam.scrollY) * Math.min(1, dt * 6);
     this.building.updateRequested(world.requestedFloors(), this.time_);
     this.hud.update(dt);
 
@@ -271,7 +334,7 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: c,
       x: 42,
-      y: HUD_H / 2 - 8,
+      y: this.cameras.main.scrollY + HUD_H / 2 - 8,
       scale: 0.6,
       duration: 520,
       ease: 'Cubic.In',
@@ -284,12 +347,14 @@ export class GameScene extends Phaser.Scene {
   private makePanel(
     lines: { text: string; size: number; color: number; bold?: boolean }[],
     buttons: { label: string; color?: number; onClick: () => void }[],
+    /** `bottom`: anchor the card's bottom edge here instead of centring; `dim: false` keeps the game visible */
+    opts: { dim?: boolean; bottom?: number } = {},
   ): void {
     this.overlay?.destroy();
     const c = this.add.container(0, 0).setDepth(DEPTH_OVERLAY);
-    const dim = this.add.rectangle(0, 0, W, H, COLORS.night, 0.62).setOrigin(0).setInteractive(); // swallows taps
+    if (opts.dim !== false) c.add(this.add.rectangle(0, 0, W, H, COLORS.night, 0.62).setOrigin(0).setInteractive()); // swallows taps
     const g = this.add.graphics();
-    c.add([dim, g]);
+    c.add(g);
 
     // Lay the text out first, then size the panel around it.
     const texts = lines.map((l) => {
@@ -300,7 +365,7 @@ export class GameScene extends Phaser.Scene {
     const gap = 14;
     const textH = texts.reduce((h, t) => h + t.height + gap, -gap);
     const panelH = 44 + textH + 36 + 58 + 30;
-    const py = H / 2 - panelH / 2;
+    const py = opts.bottom !== undefined ? opts.bottom - panelH : H / 2 - panelH / 2;
     let y = py + 44;
     for (const t of texts) {
       t.y = y;
@@ -317,6 +382,7 @@ export class GameScene extends Phaser.Scene {
       c.add(button(this, bx, by, bw, 58, b.label, { color: b.color, onClick: b.onClick, pulse: i === buttons.length - 1 }));
     });
 
+    pin(c);
     c.setAlpha(0);
     this.tweens.add({ targets: c, alpha: 1, duration: 250 });
     this.overlay = c;
@@ -334,27 +400,34 @@ export class GameScene extends Phaser.Scene {
     return `Wallet: ${this.profile.coins.toLocaleString()} coins`;
   }
 
+  /** Main menu: logo up top, a small card at the bottom, the demo tower running in between. */
   private showTitle(): void {
     const firstTime = this.profile.shifts === 0;
-    const intro = 'Tap a floor to send the lift.\nPassengers hop on and off\nby themselves.\n\nDeliver them before they\nrun out of patience!';
+    const intro = 'Hold ▲ ▼ or tap a floor to move the lift.\nDeliver everyone before they lose patience!';
     this.makePanel(
-      [
-        { text: 'Going Up!', size: 52, color: COLORS.cabFrame, bold: true },
-        firstTime
-          ? { text: intro, size: 20, color: COLORS.ink }
-          : { text: `Shift ${this.profile.shifts + 1}  ·  Best ${this.profile.best.toLocaleString()}`, size: 20, color: COLORS.ink },
-        ...(firstTime ? [] : [{ text: this.walletLine(), size: 18, color: 0x8a8ca8, bold: true }]),
-      ],
+      firstTime
+        ? [{ text: intro, size: 17, color: COLORS.ink }]
+        : [
+            { text: `Shift ${this.profile.shifts + 1}  ·  Best ${this.profile.best.toLocaleString()}`, size: 19, color: COLORS.ink, bold: true },
+            { text: this.walletLine(), size: 16, color: 0x8a8ca8, bold: true },
+          ],
       [
         { label: 'Shop', color: COLORS.shaft, onClick: () => this.scene.start('shop') },
         { label: 'Start shift', onClick: () => this.startPlay() },
       ],
+      { dim: false, bottom: H - 14 }, // covers the control panel, which the menu doesn't use
     );
+    this.overlay!.addAt(pin(this.add.rectangle(0, 0, W, HUD_H - 4, COLORS.night).setOrigin(0)), 0);
+    const logo = this.add.container(W / 2, HUD_H / 2 - 4);
+    logo.add(label(this, 0, 4, 'Going Up!', 54, COLORS.ink, true).setOrigin(0.5).setAlpha(0.5));
+    logo.add(label(this, 0, 0, 'Going Up!', 54, COLORS.cabFrame, true).setOrigin(0.5));
+    this.overlay!.add(pin(logo));
+    this.tweens.add({ targets: logo, y: logo.y - 4, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
   }
 
+  /** Begin a real shift in the same tower the menu was showing. */
   private startPlay(): void {
-    this.phase = 'play';
-    this.closeOverlay();
+    this.scene.restart({ skipTitle: true, rooms: this.roomIds });
   }
 
   private showDraft(offer: Perk[]): void {
@@ -405,6 +478,7 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: card, x: W / 2, duration: 320, delay: 80 * i, ease: 'Back.Out' });
       c.add(card);
     });
+    pin(c);
     this.overlay = c;
   }
 

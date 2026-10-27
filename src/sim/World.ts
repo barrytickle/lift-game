@@ -68,13 +68,33 @@ export class World {
     this.nextDraftAt = cfg.draft.first;
   }
 
+  /** Direction of a held ▲/▼, or 0. */
+  holding: 0 | 1 | -1 = 0;
+
   /** Player input: send the lift to a floor. Allowed at any time, even mid-trip. */
   requestFloor(floor: number): void {
     if (this.over || floor < 0 || floor >= this.cfg.floors) return;
+    this.holding = 0;
     if (floor === this.lift.target) return;
     const from = this.lift.stoppedAt;
     this.lift.target = floor;
     if (from !== null) this.events.emit('depart', { from, to: floor });
+  }
+
+  /** Player input: start moving continuously while ▲/▼ is held. */
+  hold(dir: 1 | -1): void {
+    if (this.over) return;
+    const from = this.lift.stoppedAt;
+    this.holding = dir;
+    this.lift.hold(dir, this.cfg.floors);
+    if (from !== null && this.lift.target !== from) this.events.emit('depart', { from, to: this.lift.target });
+  }
+
+  /** Player input: ▲/▼ let go, so stop at the next floor in that direction. */
+  release(): void {
+    if (!this.holding) return;
+    this.lift.release(this.holding, this.cfg.floors);
+    this.holding = 0;
   }
 
   update(dt: number): void {

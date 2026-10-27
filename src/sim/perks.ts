@@ -35,9 +35,9 @@ export const PERKS: Perk[] = [
     },
   },
   {
-    id: 'muzak',
-    name: 'Lift Muzak',
-    desc: 'Everyone waiting calms down, newcomers are 10% more patient',
+    id: 'music',
+    name: 'Lift Music',
+    desc: 'Soothing tunes: everyone waiting calms down, newcomers are 10% more patient',
     rarity: 'common',
     max: 3,
     apply: (w) => {

@@ -27,6 +27,22 @@ export class Lift {
     return this.position === this.target && this.velocity === 0 ? this.target : null;
   }
 
+  /** Held ▲/▼: head for the end of the shaft, passing floors without stopping. */
+  hold(dir: 1 | -1, floors: number): void {
+    this.target = dir > 0 ? floors - 1 : 0;
+  }
+
+  /**
+   * Let go: stop at the first floor ahead that the cab can still brake for.
+   * From rest (a quick tap) that's simply the next floor in that direction.
+   */
+  release(dir: 1 | -1, floors: number): void {
+    const stopDist = (this.velocity * this.velocity) / (2 * this.cfg.accel);
+    const eps = 1e-6;
+    const next = dir > 0 ? Math.ceil(this.position + stopDist + eps) : Math.floor(this.position - stopDist - eps);
+    this.target = Math.max(0, Math.min(floors - 1, next));
+  }
+
   update(dt: number): boolean {
     const d = this.target - this.position;
     if (d === 0 && this.velocity === 0) return false;

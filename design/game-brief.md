@@ -4,7 +4,7 @@
 
 ## Core loop
 - Passengers appear on floors wearing a badge with the floor they want.
-- Tap a floor: the lift glides there, riders hop off, waiting folk hop on (automatic).
+- Tap a floor, or hold ▲/▼ on the lift panel and let go to stop at the next floor; riders hop off, waiting folk hop on (automatic).
 - Each delivery pays coins: more for quick trips, a bonus for dropping several at one stop.
 - Arrivals speed up over the shift until the single lift can't keep up.
 - Delivery milestones pause the shift for a perk draft: pick 1 of 3 random cards (roguelike, resets each shift).
@@ -22,6 +22,7 @@
 - Expressive procedural passengers: mood faces, blinking, hopping, cheering, fuming
 - Perk drafts: ~9 stackable perks, common/rare, offered at growing delivery milestones
 - Shop with permanent upgrades, unlockable room themes (Tiny Tower-style floors), cab skins, hat packs
+- Main menu shows the tower running on autopilot at a calm, constant pace
 - Every floor drawn as a themed room; floors 1+ are dealt randomly from the rooms you own each shift.
   Rooms: Lobby (always G); free: Apartment, Office, Coffee Shop, Gym; shop: Laundry Room, Plant Shop,
   Restaurant, Arcade, Cinema Room, Game Dev Studio

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DPR, FONT, GROUND_Y, HUD_H, Layout, W, floorLabel } from './Layout';
+import { DPR, FONT, GROUND_Y, Layout, W, floorLabel } from './Layout';
 import { COLORS, FLOOR_COLORS, hex } from './Palette';
 import type { RoomTheme } from './rooms';
 
@@ -82,9 +82,6 @@ export class BuildingView {
     // Outside ground
     g.fillStyle(COLORS.nightLight, 1).fillRect(0, GROUND_Y + 6, W, 200);
     g.fillStyle(0x4a4d6c, 1).fillRect(0, GROUND_Y + 6, W, 6); // kerb
-
-    // HUD bar background
-    g.fillStyle(COLORS.night, 1).fillRect(0, 0, W, HUD_H - 4);
   }
 
   flash(f: number): void {

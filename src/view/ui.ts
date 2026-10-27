@@ -53,6 +53,16 @@ export function button(
   return c;
 }
 
+/**
+ * Fix an object (and everything inside it) to the screen so camera scrolling
+ * doesn't move it: HUD, control panel, overlays.
+ */
+export function pin<T extends Phaser.GameObjects.GameObject>(obj: T): T {
+  (obj as unknown as Phaser.GameObjects.Components.ScrollFactor).setScrollFactor?.(0);
+  if (obj instanceof Phaser.GameObjects.Container) obj.each((child: Phaser.GameObjects.GameObject) => pin(child));
+  return obj;
+}
+
 /** Plain bold/normal text with the game font at DPR resolution. */
 export function label(
   scene: Phaser.Scene,
@@ -89,7 +99,7 @@ export function coinIcon(scene: Phaser.Scene, x: number, y: number, r = 11): Pha
 export const PERK_ICONS: Record<string, { glyph: string; color: number }> = {
   roomy: { glyph: '+1', color: 0xe07a5f },
   turbo: { glyph: '»', color: 0x5aa9e6 },
-  muzak: { glyph: '♪', color: 0xa78bfa },
+  music: { glyph: '♪', color: 0xa78bfa },
   tipjar: { glyph: '+4', color: 0xf2b630 },
   doors: { glyph: '||', color: 0x4fbf9f },
   express: { glyph: '%', color: 0x22d3ee },

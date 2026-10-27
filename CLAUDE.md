@@ -12,13 +12,14 @@ This project uses a trimmed copy of the Game Studios framework (from `C:\Users\B
 
 ## Layout
 - `src/config.ts`: every gameplay tuning value. Upgrades later = a modified copy passed to `World`.
-- `src/sim/`: pure simulation (`World`, `Lift`, `Emitter`, `perks`). **No Phaser imports.** It emits events
+- `src/sim/`: pure simulation (`World`, `Lift`, `Emitter`, `perks`, `autopilot`). **No Phaser imports.** It emits events
   (`spawn`, `board`, `deliver`, `walkout`, `arrive`, `depart`, `draft`, `perk`, `gameOver`).
-  A `draft` pauses the sim until `World.choosePerk()`.
+  A `draft` pauses the sim until `World.choosePerk()`. Input: `requestFloor`, or `hold(dir)`/`release()`
+  (release stops at the first floor ahead the cab can brake for). `Autopilot` drives the menu demo and the bot.
 - `src/meta/`: shop catalog and the saved `Profile` (localStorage). `runConfig(profile)` builds each
   shift's config copy from the permanent upgrades; perks then mutate that copy during the shift.
 - `src/view/`: Phaser-only presentation that reads sim state every frame and reacts to events.
-- `src/view/rooms.ts`: procedurally drawn floor themes. `view/ControlPanel.ts`: brass ▲/▼ panel under the shaft.
+- `src/view/rooms.ts`: procedurally drawn floor themes. `view/ControlPanel.ts`: brass hold-to-move ▲/▼ panel.
 - `src/scenes/GameScene.ts`: wires sim to views, handles input, overlays, perk cards and view lifecycle.
   `ShopScene.ts`: spend banked coins (Upgrades / Rooms / Style tabs).
 - `tests/`: Vitest on the sim. `tools/balance.ts`: headless bot that plays many shifts.
@@ -33,3 +34,6 @@ This project uses a trimmed copy of the Game Studios framework (from `C:\Users\B
 - The sim uses delta time and stays deterministic given an RNG (tests inject one).
 - Views never mutate sim state; input goes through `World.requestFloor`.
 - Design space is 480 wide and height follows device aspect (`view/Layout.ts`); camera zoom = DPR for crisp text.
+- Camera origin is (0,0) and follows the cab when the tower is taller than the screen (floors never go below
+  `MIN_FLOOR_H`). Screen-fixed UI must go through `pin()` in `view/ui.ts`. Try tall towers with `?floors=10`.
+- Audio plans live in `design/asset-list.md`; every sound has a synth placeholder in `view/Sfx.ts`.

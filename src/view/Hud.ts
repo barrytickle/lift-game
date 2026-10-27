@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DPR, FONT, HUD_H, W } from './Layout';
 import { COLORS, hex } from './Palette';
+import { pin } from './ui';
 
 export class Hud {
   private scoreText: Phaser.GameObjects.Text;
@@ -8,12 +9,15 @@ export class Hud {
   private coinIcon: Phaser.GameObjects.Container;
   private hearts: Phaser.GameObjects.Graphics[] = [];
   private lives: number;
+  private root: Phaser.GameObjects.Container;
   private shown = 0;
   private target = 0;
 
   constructor(private scene: Phaser.Scene, lives: number) {
     const cy = HUD_H / 2 - 8;
-    this.coinIcon = scene.add.container(42, cy).setDepth(50);
+    this.root = scene.add.container(0, 0).setDepth(50);
+    this.root.add(scene.add.rectangle(0, 0, W, HUD_H - 4, COLORS.night).setOrigin(0));
+    this.coinIcon = scene.add.container(42, cy);
     const cg = scene.add.graphics();
     cg.fillStyle(COLORS.coinDark, 1).fillCircle(0, 2, 17);
     cg.fillStyle(COLORS.coin, 1).fillCircle(0, 0, 17);
@@ -31,15 +35,25 @@ export class Hud {
       .setResolution(DPR)
       .setDepth(50);
 
+    this.root.add([this.coinIcon, this.scoreText, this.subText]);
+    pin(this.root);
     this.lives = lives;
     this.setLives(lives, lives);
+  }
+
+  setVisible(on: boolean): void {
+    this.root.setVisible(on);
   }
 
   /** Redraw the heart row; grows when perks add hearts. */
   setLives(lives: number, max: number): void {
     const cy = HUD_H / 2 - 8;
     const gap = max > 6 ? 28 : 34;
-    while (this.hearts.length < max) this.hearts.push(this.scene.add.graphics().setDepth(50));
+    while (this.hearts.length < max) {
+      const g = pin(this.scene.add.graphics());
+      this.root.add(g);
+      this.hearts.push(g);
+    }
     this.hearts.forEach((g, i) => {
       g.setPosition(W - 30 - i * gap, cy).setScale(max > 6 ? 0.85 : 1);
       this.drawHeart(g, i < lives ? COLORS.heart : COLORS.heartEmpty);

@@ -1,7 +1,9 @@
 # Going Up! (Claude Code Game Studios, minimal mode)
 
 Mobile-first portrait lift-management game. **Phaser 3.90 + TypeScript + Vite.** No external assets:
-everything is drawn with Phaser Graphics and tweens, and sound is synthesised with WebAudio.
+everything is drawn with Phaser Graphics and tweens. Sound is synthesised with WebAudio, except
+recordings in `public/sfx/` (drop-off ding, motor loop, background music) that `view/Sfx.ts` fetches;
+the ding falls back to the synth, and music starts on the first tap (browser autoplay rules).
 
 This project uses a trimmed copy of the Game Studios framework (from `C:\Users\Barry\my-game`):
 - Workflow tier: **minimal**. The only design doc is `design/game-brief.md`, and its build order is the plan.

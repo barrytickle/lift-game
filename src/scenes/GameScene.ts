@@ -111,6 +111,7 @@ export class GameScene extends Phaser.Scene {
     this.panel.setVisible(!attract);
 
     this.bindWorldEvents();
+    this.events.once('shutdown', () => sfx.motorLevel(0)); // leaving for the shop or restarting
 
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
       if (over.length === 0) this.onTap(ptr); // a chip or button took it
@@ -220,7 +221,7 @@ export class GameScene extends Phaser.Scene {
         }
         if (!this.quiet) this.flyCoin(v.x, v.y - 30);
       }
-      if (!this.quiet) sfx.coin(groupIndex);
+      if (!this.quiet) sfx.dropOff(groupIndex);
       this.hud.setScore(this.world.score);
       this.hud.setDelivered(this.world.delivered);
     });
@@ -239,10 +240,6 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.shake(140, 0.006);
       sfx.walkout();
       navigator.vibrate?.(60);
-    });
-
-    ev.on('arrive', () => {
-      if (!this.quiet) sfx.ding();
     });
 
     ev.on('draft', ({ offer }) => {
@@ -310,6 +307,7 @@ export class GameScene extends Phaser.Scene {
 
     const { world, layout } = this;
     this.liftView.update(dt, world.lift, world.usefulFloors());
+    sfx.motorLevel(this.phase === 'play' ? Math.abs(world.lift.velocity) / world.cfg.lift.maxSpeed : 0);
     const calls = world.calls();
     this.panel.update(dt, world.lift, calls);
     const cam = this.cameras.main;

@@ -17,6 +17,9 @@ Priority: **P1** = needed for a first public build, **P2** = big polish win, **P
 
 ## Music
 
+**In the game now:** `public/sfx/music.mp3` (Barry's "Going Up" seamless loop, 115 s) plays at low volume
+from the first tap across the menu, shifts and shop. The tracks below are still ideas for later variety.
+
 | ID | Where it plays | Length / loop | Feel | Pri |
 |---|---|---|---|---|
 | `mus_menu` | Main menu (autopilot demo) | 60–90 s seamless loop | Laid-back bossa nova lift music: vibraphone, nylon guitar, brushed kit. The "lift music" joke, played straight and lovely | P1 |
@@ -37,8 +40,8 @@ overtime starts. That's cheap to code and makes the chaos feel musical.
 ### Lift
 | ID | Trigger | Notes | Placeholder | Pri |
 |---|---|---|---|---|
-| `sfx_lift_ding` | Cab arrives at a floor | The signature sound. Two-tone bell, warm, under 0.6 s. Must sound good repeated 100× a shift | `ding()` | P1 |
-| `sfx_lift_motor_loop` | While the cab moves | Soft hum, pitch follows speed (game sets the rate). Very quiet | *new* | P2 |
+| `sfx_lift_ding` | Passenger dropped off | **Done:** `public/sfx/ding.wav` (Barry's recording, rebuilt so the strike comes first). Pitch steps up for group drop-offs | `dropOff()` | P1 |
+| `sfx_lift_motor_loop` | While the cab moves | **Done:** `public/sfx/move.wav`, a seamless 3.5 s loop; volume and pitch follow speed | `motorLevel()` | P2 |
 | `sfx_lift_start` / `sfx_lift_stop` | Pull away / brake | Tiny mechanical clunk and cable creak; the stop one sells the squash animation | *new* | P2 |
 | `sfx_doors_open` / `sfx_doors_close` | Glass doors slide | Short airy "fsst", 0.2 s | *new* | P2 |
 | `sfx_panel_press` | ▲/▼ pressed | Chunky brass button click, satisfying | `tap()` | P1 |

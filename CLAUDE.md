@@ -15,7 +15,7 @@ This project uses a trimmed copy of the Game Studios framework (from `C:\Users\B
 - `src/sim/`: pure simulation (`World`, `Lift`, `Emitter`, `perks`, `autopilot`). **No Phaser imports.** It emits events
   (`spawn`, `board`, `deliver`, `walkout`, `arrive`, `depart`, `draft`, `perk`, `gameOver`).
   A `draft` pauses the sim until `World.choosePerk()`. Input: `requestFloor`, or `hold(dir)`/`release()`
-  (release stops at the first floor ahead the cab can brake for). `Autopilot` drives the menu demo and the bot.
+  (release settles on the floor nearest where the cab would stop; a quick tap moves one floor). `Autopilot` drives the menu demo and the bot.
 - `src/meta/`: shop catalog and the saved `Profile` (localStorage). `runConfig(profile)` builds each
   shift's config copy from the permanent upgrades; perks then mutate that copy during the shift.
 - `src/view/`: Phaser-only presentation that reads sim state every frame and reacts to events.

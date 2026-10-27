@@ -2,11 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG, type GameConfig } from '../src/config';
 import { World } from '../src/sim/World';
 
+// A fixed 5-floor test tower with a brisk lift, so these tests cover the rules
+// rather than the current tuning (which starts smaller and slower).
+const BASE: GameConfig = {
+  ...DEFAULT_CONFIG,
+  floors: 5,
+  lift: { ...DEFAULT_CONFIG.lift, maxSpeed: 3.4, accel: 10 },
+};
+
 // No random spawning in these tests: spawns are placed by hand.
 function makeWorld(overrides: Partial<GameConfig> = {}): World {
   const cfg: GameConfig = {
-    ...DEFAULT_CONFIG,
-    spawn: { ...DEFAULT_CONFIG.spawn, firstDelay: 1e9 },
+    ...BASE,
+    spawn: { ...BASE.spawn, firstDelay: 1e9 },
     ...overrides,
   };
   return new World(cfg, () => 0.5);
@@ -63,7 +71,7 @@ describe('boarding and delivery', () => {
   });
 
   it('never boards more than capacity', () => {
-    const w = makeWorld({ lift: { ...DEFAULT_CONFIG.lift, capacity: 4 } });
+    const w = makeWorld({ lift: { ...BASE.lift, capacity: 4 } });
     for (let i = 0; i < 6; i++) w.spawnPassenger(0, 2);
     run(w, 2);
     expect(w.lift.riders).toHaveLength(4);
@@ -71,7 +79,7 @@ describe('boarding and delivery', () => {
   });
 
   it('lets riders off before new passengers board', () => {
-    const w = makeWorld({ lift: { ...DEFAULT_CONFIG.lift, capacity: 4 } });
+    const w = makeWorld({ lift: { ...BASE.lift, capacity: 4 } });
     for (let i = 0; i < 4; i++) w.spawnPassenger(0, 2);
     run(w, 1);
     expect(w.lift.isFull).toBe(true);
@@ -85,7 +93,7 @@ describe('boarding and delivery', () => {
   });
 
   it('pays a growing group bonus for drop-offs at the same stop', () => {
-    const w = makeWorld({ lift: { ...DEFAULT_CONFIG.lift, capacity: 4 } });
+    const w = makeWorld({ lift: { ...BASE.lift, capacity: 4 } });
     w.spawnPassenger(0, 1);
     w.spawnPassenger(0, 1);
     run(w, 1);
@@ -96,6 +104,24 @@ describe('boarding and delivery', () => {
     expect(drops.map((d) => d.groupIndex)).toEqual([0, 1]);
     // Patience bonus may differ by a rounding coin; the group bonus dominates.
     expect(drops[1].coins - drops[0].coins).toBeGreaterThanOrEqual(DEFAULT_CONFIG.scoring.groupBonus - 1);
+  });
+});
+
+describe('scoring', () => {
+  it('pays more for longer trips', () => {
+    const w = makeWorld();
+    const coins: number[] = [];
+    w.events.on('deliver', (e) => coins.push(e.coins));
+    for (const dest of [1, 4]) {
+      w.requestFloor(0);
+      run(w, 3);
+      w.spawnPassenger(0, dest);
+      run(w, 0.5);
+      w.requestFloor(dest);
+      run(w, 3);
+    }
+    // Patience bonus can differ by a coin or two; the per-floor bonus dominates.
+    expect(coins[1] - coins[0]).toBeGreaterThanOrEqual(3 * BASE.scoring.perFloor - 2);
   });
 });
 
@@ -171,7 +197,7 @@ describe('patience', () => {
 
 describe('spawning', () => {
   it('speeds up over time and respects the per-floor queue limit', () => {
-    const w = new World(DEFAULT_CONFIG, Math.random);
+    const w = new World(BASE, Math.random);
     const early = w.spawnInterval();
     // Keep the lift parked on top so nobody gets picked up; give infinite lives.
     w.lives = 1e9;
@@ -233,34 +259,77 @@ describe('hold controls', () => {
     expect(w.lift.stoppedAt).toBe(1);
   });
 
-  it('holding passes floors without stopping, releasing stops at a floor ahead without reversing', () => {
+  it('holding passes floors without stopping, and release settles exactly on a floor', () => {
     const w = makeWorld();
     w.hold(1);
     run(w, 0.8);
-    const atRelease = w.lift.position;
-    expect(atRelease).toBeGreaterThan(1); // went past floor 1 without stopping
+    expect(w.lift.position).toBeGreaterThan(1); // went past floor 1 without stopping
     w.release();
-    let prev = w.lift.position;
+    run(w, 3);
+    expect(Number.isInteger(w.lift.stoppedAt)).toBe(true);
+  });
+
+  // A slow lift, so the coasting distance is tiny and "nearest floor" is unambiguous.
+  const slow = { lift: { ...BASE.lift, maxSpeed: 1, accel: 10 } };
+  const holdUpTo = (w: World, pos: number) => {
+    w.hold(1);
+    while (w.lift.position < pos) w.update(1 / 60);
+  };
+
+  it('releasing just past a floor eases back down to it', () => {
+    const w = makeWorld(slow);
+    holdUpTo(w, 1.2);
+    w.release();
+    run(w, 3);
+    expect(w.lift.stoppedAt).toBe(1);
+  });
+
+  it('at full game speed, releasing a little past a floor still settles back on it', () => {
+    const w = makeWorld({ lift: { ...DEFAULT_CONFIG.lift } }); // the real starting lift
+    w.hold(1);
+    while (w.lift.position < 1.2) w.update(1 / 60);
+    expect(w.lift.velocity).toBeCloseTo(DEFAULT_CONFIG.lift.maxSpeed, 1);
+    w.release();
+    let max = 0;
+    for (let i = 0; i < 240; i++) {
+      w.update(1 / 60);
+      max = Math.max(max, w.lift.position);
+    }
+    expect(w.lift.stoppedAt).toBe(1);
+    expect(max).toBeLessThan(1.45); // a short settle, not a big bounce
+  });
+
+  it('releasing closer to the next floor carries on up to it', () => {
+    const w = makeWorld(slow);
+    holdUpTo(w, 1.65);
+    w.release();
+    run(w, 3);
+    expect(w.lift.stoppedAt).toBe(2);
+  });
+
+  it('releasing while exactly on a floor stops there', () => {
+    const w = makeWorld(slow);
+    holdUpTo(w, 1);
+    w.lift.position = 1; // land exactly on the floor at speed
+    w.release();
+    let max = 0;
     for (let i = 0; i < 180; i++) {
       w.update(1 / 60);
-      expect(w.lift.position).toBeGreaterThanOrEqual(prev - 1e-9);
-      prev = w.lift.position;
+      max = Math.max(max, w.lift.position);
     }
-    const stop = w.lift.stoppedAt;
-    expect(stop).not.toBeNull();
-    expect(stop!).toBeGreaterThan(atRelease);
-    expect(Number.isInteger(stop)).toBe(true);
+    expect(w.lift.stoppedAt).toBe(1);
+    expect(max).toBeLessThan(1.2);
   });
 
   it('holding stops at the end of the shaft', () => {
     const w = makeWorld();
     w.hold(1);
     run(w, 5);
-    expect(w.lift.stoppedAt).toBe(DEFAULT_CONFIG.floors - 1);
+    expect(w.lift.stoppedAt).toBe(BASE.floors - 1);
     w.hold(-1);
     w.release();
     run(w, 2);
-    expect(w.lift.stoppedAt).toBe(DEFAULT_CONFIG.floors - 2);
+    expect(w.lift.stoppedAt).toBe(BASE.floors - 2);
   });
 
   it('holding down on the ground floor does nothing', () => {

@@ -107,14 +107,16 @@ describe('shop and profile', () => {
 
   it('turns upgrades into the shift config without touching the defaults', () => {
     const p = newProfile();
-    p.upgrades = { capacity: 2, heart: 1, motor: 3, headstart: 1, lucky: 1 };
+    p.upgrades = { floors: 2, capacity: 2, heart: 1, motor: 3, headstart: 1, lucky: 1 };
     const cfg = runConfig(p);
     expect(cfg.lift.capacity).toBe(3);
     expect(cfg.lives).toBe(6);
-    expect(cfg.lift.maxSpeed).toBeCloseTo(DEFAULT_CONFIG.lift.maxSpeed * 1.3);
+    expect(cfg.floors).toBe(DEFAULT_CONFIG.floors + 2);
+    expect(cfg.lift.maxSpeed).toBeCloseTo(DEFAULT_CONFIG.lift.maxSpeed * 1.45);
     expect(cfg.draft.first).toBe(0);
     expect(cfg.draft.choices).toBe(4);
     expect(DEFAULT_CONFIG.lift.capacity).toBe(1);
+    expect(DEFAULT_CONFIG.floors).toBe(3);
   });
 
   it('banks shift coins and tracks the best', () => {

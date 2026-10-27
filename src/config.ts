@@ -8,10 +8,14 @@ export interface GameConfig {
     capacity: number;
     /** floors per second */
     maxSpeed: number;
-    /** floors per second^2, used for both speeding up and braking */
+    /** floors per second^2 when speeding up */
     accel: number;
+    /** braking is this many times firmer than accel, so a released lift settles on the nearest floor */
+    brake: number;
     /** seconds between one passenger stepping out/in and the next */
     transferInterval: number;
+    /** releasing ▲/▼ before moving this far (floors) counts as a tap: go exactly one floor */
+    tapDistance: number;
   };
 
   passengers: {
@@ -43,6 +47,8 @@ export interface GameConfig {
     patienceBonus: number;
     /** extra coins per additional passenger dropped off at the same stop */
     groupBonus: number;
+    /** extra coins per floor between pickup and drop-off, so taller towers pay more */
+    perFloor: number;
   };
 
   /** perk drafts: first at `first` deliveries, then gaps of gap, gap+growth, gap+2*growth... */
@@ -57,12 +63,14 @@ export interface GameConfig {
 }
 
 export const DEFAULT_CONFIG: GameConfig = {
-  floors: 5,
+  floors: 3, // the bare minimum; Taller Tower (shop) adds floors
   lift: {
     capacity: 1, // one seat to start; Bigger Cab (shop) and Roomy Cab (perk) add more
-    maxSpeed: 3.4,
-    accel: 10,
+    maxSpeed: 2.2, // Better Motor (shop) and Turbo Motor (perk) speed it up
+    accel: 6.5,
+    brake: 2.5,
     transferInterval: 0.16,
+    tapDistance: 0.25,
   },
   passengers: {
     patience: 20,
@@ -71,10 +79,10 @@ export const DEFAULT_CONFIG: GameConfig = {
   },
   spawn: {
     firstDelay: 0.6,
-    startInterval: 4.6,
+    startInterval: 4.0,
     minInterval: 1.4,
     rampTime: 180,
-    overtimeHalfLife: 150,
+    overtimeHalfLife: 110,
     floorInterval: 0.3,
     jitter: 0.35,
   },
@@ -82,6 +90,7 @@ export const DEFAULT_CONFIG: GameConfig = {
     base: 10,
     patienceBonus: 15,
     groupBonus: 5,
+    perFloor: 6,
   },
   draft: {
     first: 10,

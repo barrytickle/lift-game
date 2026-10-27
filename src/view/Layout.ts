@@ -1,3 +1,4 @@
+import Phaser from 'phaser';
 // Portrait design space: fixed width, height stretched to the device's aspect
 // (within limits) so tall phones aren't letterboxed. Phaser's FIT scaler does the
 // rest. The canvas is rendered at up to 2x so shapes and text stay crisp.
@@ -14,6 +15,8 @@ export const GROUND_Y = H - PANEL_H;
 
 /** Floors never get squashed below this; taller towers scroll instead. */
 export const MIN_FLOOR_H = 132;
+/** ...and never get stretched past this: a short tower leaves night sky above it. */
+export const MAX_FLOOR_H = 190;
 
 export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
@@ -27,7 +30,7 @@ export class Layout {
   readonly queueGap = 50;
 
   constructor(readonly floors: number) {
-    this.floorH = Math.max(MIN_FLOOR_H, (GROUND_Y - HUD_H - 8) / floors);
+    this.floorH = Phaser.Math.Clamp((GROUND_Y - HUD_H - 8) / floors, MIN_FLOOR_H, MAX_FLOOR_H);
   }
 
   /** Highest the camera may scroll (negative = up); 0 when the tower fits the screen. */

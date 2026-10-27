@@ -27,20 +27,35 @@ export class Lift {
     return this.position === this.target && this.velocity === 0 ? this.target : null;
   }
 
+  /** where the current hold started, to tell a quick tap from a real hold */
+  private holdFrom = 0;
+
   /** Held ▲/▼: head for the end of the shaft, passing floors without stopping. */
   hold(dir: 1 | -1, floors: number): void {
+    this.holdFrom = this.position;
     this.target = dir > 0 ? floors - 1 : 0;
   }
 
   /**
-   * Let go: stop at the first floor ahead that the cab can still brake for.
-   * From rest (a quick tap) that's simply the next floor in that direction.
+   * Let go: settle on whichever floor is nearest to where the cab would coast to
+   * a stop, even if that means easing back to the floor it just passed. A quick
+   * tap (barely moved) still goes one floor in the pressed direction.
    */
   release(dir: 1 | -1, floors: number): void {
-    const stopDist = (this.velocity * this.velocity) / (2 * this.cfg.accel);
     const eps = 1e-6;
-    const next = dir > 0 ? Math.ceil(this.position + stopDist + eps) : Math.floor(this.position - stopDist - eps);
+    let next: number;
+    if (Math.abs(this.position - this.holdFrom) < this.cfg.tapDistance) {
+      next = dir > 0 ? Math.floor(this.holdFrom + eps) + 1 : Math.ceil(this.holdFrom - eps) - 1;
+    } else {
+      const stopDist = (this.velocity * this.velocity) / (2 * this.decel);
+      next = Math.round(this.position + Math.sign(this.velocity) * stopDist);
+    }
     this.target = Math.max(0, Math.min(floors - 1, next));
+  }
+
+  /** braking rate, floors per second^2 */
+  private get decel(): number {
+    return this.cfg.accel * this.cfg.brake;
   }
 
   update(dt: number): boolean {
@@ -48,16 +63,20 @@ export class Lift {
     if (d === 0 && this.velocity === 0) return false;
 
     const { maxSpeed, accel } = this.cfg;
-    const brakeSpeed = Math.sqrt(2 * accel * Math.abs(d));
+    const decel = this.decel;
+    const brakeSpeed = Math.sqrt(2 * decel * Math.abs(d));
     const desired = Math.sign(d) * Math.min(maxSpeed, brakeSpeed);
     const dv = desired - this.velocity;
-    const step = accel * dt;
+    // Slowing down (or reversing) uses the firmer brakes; speeding up uses accel.
+    const braking = this.velocity !== 0 && Math.sign(dv) !== Math.sign(this.velocity);
+    const step = (braking ? decel : accel) * dt;
     this.velocity += Math.abs(dv) <= step ? dv : Math.sign(dv) * step;
     this.position += this.velocity * dt;
 
-    // Snap on arrival (or if we stepped past the target this frame).
+    // Snap on arrival (or if we stepped past the target this frame). Released
+    // exactly on a floor while moving (d = 0), it brakes and eases back instead.
     const after = this.target - this.position;
-    if (Math.abs(after) < 0.004 || Math.sign(after) !== Math.sign(d)) {
+    if (Math.abs(after) < 0.004 || (d !== 0 && Math.sign(after) !== Math.sign(d))) {
       this.position = this.target;
       this.velocity = 0;
       return true; // arrived this frame

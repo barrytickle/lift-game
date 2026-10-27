@@ -76,8 +76,9 @@ export function bankShift(p: Profile, score: number): boolean {
 export function runConfig(p: Profile): GameConfig {
   const cfg = cloneConfig();
   const lvl = (id: string) => p.upgrades[id] ?? 0;
-  cfg.lift.maxSpeed *= 1 + 0.1 * lvl('motor');
-  cfg.lift.accel *= 1 + 0.1 * lvl('motor');
+  cfg.floors += lvl('floors');
+  cfg.lift.maxSpeed *= 1 + 0.15 * lvl('motor');
+  cfg.lift.accel *= 1 + 0.15 * lvl('motor');
   cfg.passengers.patience *= 1 + 0.1 * lvl('music');
   cfg.lift.capacity += lvl('capacity');
   cfg.lives += lvl('heart');

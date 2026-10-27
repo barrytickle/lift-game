@@ -265,9 +265,13 @@ export class World {
       const p = this.passengers.get(id)!;
       p.state = 'gone';
       this.passengers.delete(id);
-      const { base, patienceBonus, groupBonus } = this.cfg.scoring;
+      const { base, patienceBonus, groupBonus, perFloor } = this.cfg.scoring;
       const groupIndex = this.dropsThisStop++;
-      const coins = base + Math.round(patienceBonus * (p.patience / p.maxPatience)) + groupBonus * groupIndex;
+      const coins =
+        base +
+        Math.round(patienceBonus * (p.patience / p.maxPatience)) +
+        groupBonus * groupIndex +
+        perFloor * Math.abs(p.dest - p.origin);
       this.score += coins;
       this.delivered++;
       this.events.emit('deliver', { p, floor, coins, groupIndex });

@@ -202,6 +202,7 @@ export class ShopScene extends Phaser.Scene {
     } else {
       // Upgrade: coloured disc with a glyph
       const icons: Record<string, [string, number]> = {
+        floors: ['▤', 0x4fbf9f],
         motor: ['»', 0x5aa9e6],
         music: ['♪', 0xa78bfa],
         capacity: ['+1', 0xe07a5f],

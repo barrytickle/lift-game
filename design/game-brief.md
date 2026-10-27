@@ -15,7 +15,9 @@
 - A session feels complete at roughly 3–5 minutes for an average player.
 
 ## MVP: what must exist to be the game
-- 5 floors, 1 lift with smooth accel/brake, retargetable mid-trip. Starts with **one seat** to ease players in; Bigger Cab (shop, first level 250) and Roomy Cab (perk) add seats
+- Bare-minimum start: **3 floors, a slow lift and one seat**, so there's plenty to work towards. Taller Tower (shop, up to 8 floors), Better Motor and Bigger Cab (shop) grow it; Roomy Cab and Turbo Motor (perks) help mid-shift
+- Hold ▲/▼ to move; on release the lift settles on the nearest floor (firm brakes, so it can ease back to one it just passed). A quick tap moves one floor
+- Coins per delivery include a per-floor bonus for longer trips, so taller towers pay more
 - Readability: hall-call lamps light ▲/▼ on floors with people waiting (red and pulsing when someone is close to leaving), the panel buttons ring when calls are above/below, off-screen calls show as tappable chips, and the cab glows green when lined up with a floor where stopping helps
 - Passenger spawning with destinations and a visible patience ring
 - Automatic exit-then-board at stops, one person at a time

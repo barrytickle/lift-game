@@ -13,7 +13,8 @@ export interface ShopItem {
 }
 
 export const UPGRADES: ShopItem[] = [
-  { id: 'motor', kind: 'upgrade', name: 'Better Motor', desc: 'Lift is 10% faster per level', costs: [500, 1200, 2500] },
+  { id: 'floors', kind: 'upgrade', name: 'Taller Tower', desc: '+1 floor per level: more rooms, longer trips, bigger tips', costs: [300, 700, 1400, 2400, 3800] },
+  { id: 'motor', kind: 'upgrade', name: 'Better Motor', desc: 'Lift is 15% faster per level', costs: [300, 900, 2000] },
   { id: 'music', kind: 'upgrade', name: 'Calming Music', desc: 'Passengers 10% more patient per level', costs: [700, 1800, 3500] },
   { id: 'capacity', kind: 'upgrade', name: 'Bigger Cab', desc: '+1 seat in the lift per level', costs: [250, 900, 2000] },
   { id: 'heart', kind: 'upgrade', name: 'Spare Heart', desc: '+1 heart per level', costs: [2000, 5000] },

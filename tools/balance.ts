@@ -17,7 +17,7 @@ function play(reaction: number, skill: number) {
     w.update(dt);
     pilot.update(w, dt);
   }
-  return { time: Math.round(w.time), score: w.score, delivered: w.delivered };
+  return { time: Math.round(w.elapsed), score: w.score, delivered: w.delivered };
 }
 
 for (const [label, reaction, skill] of [['sharp', 0.25, 1], ['average', 0.6, 0.6], ['sloppy', 1.0, 0.2]] as const) {

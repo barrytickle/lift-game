@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, type GameConfig } from '../src/config';
+import { cloneConfig, DEFAULT_CONFIG, type GameConfig } from '../src/config';
 import { World } from '../src/sim/World';
 
 // A fixed 5-floor test tower with a brisk lift, so these tests cover the rules
@@ -192,6 +192,138 @@ describe('patience', () => {
     run(w, DEFAULT_CONFIG.passengers.patience + 0.1);
     expect(ended).toBe(true);
     expect(w.over).toBe(true);
+  });
+});
+
+describe('walkouts and run states', () => {
+  const patience = DEFAULT_CONFIG.passengers.patience;
+  const { breather } = DEFAULT_CONFIG.walkout;
+
+  /** Lift parked on 4 with a rider aboard, people waiting on 0 and 2, and some coins already earned. */
+  function busyWorld(overrides: Partial<GameConfig> = {}): World {
+    const w = makeWorld({ lift: { ...BASE.lift, capacity: 2 }, ...overrides });
+    w.spawnPassenger(0, 3);
+    run(w, 0.5);
+    w.requestFloor(3);
+    run(w, 3); // delivered: some coins in the bank
+    w.spawnPassenger(3, 1);
+    run(w, 0.5); // now riding toward 1
+    w.requestFloor(4);
+    run(w, 2);
+    w.spawnPassenger(0, 2);
+    w.spawnPassenger(2, 4);
+    return w;
+  }
+
+  it('starts each run with 3 lives, playing', () => {
+    const w = new World(cloneConfig());
+    expect(w.lives).toBe(3);
+    expect(w.state).toBe('playing');
+  });
+
+  it('one walkout empties the whole building and costs exactly one life, keeping earnings', () => {
+    const w = busyWorld();
+    const score = w.score;
+    const events: { floor: number; leavers: number; riders: number }[] = [];
+    w.events.on('walkout', (e) =>
+      events.push({ floor: e.floor, leavers: e.leavers.length, riders: e.leavers.filter((l) => l.floor === null).length }),
+    );
+    run(w, patience);
+    expect(events).toEqual([{ floor: 0, leavers: 3, riders: 1 }]);
+    expect(w.lives).toBe(DEFAULT_CONFIG.lives - 1);
+    expect(w.state).toBe('walkout');
+    expect(w.passengers.size).toBe(0);
+    expect(w.queues.every((q) => q.length === 0)).toBe(true);
+    expect(w.lift.riders).toHaveLength(0);
+    expect(w.lift.target).toBe(0);
+    expect(w.score).toBe(score);
+    expect(w.delivered).toBe(1);
+  });
+
+  it('several people running out on the same tick still cost only one life', () => {
+    const w = makeWorld();
+    w.requestFloor(4);
+    run(w, 2);
+    w.spawnPassenger(0, 2);
+    w.spawnPassenger(1, 3);
+    w.spawnPassenger(2, 0);
+    let walkouts = 0;
+    w.events.on('walkout', () => walkouts++);
+    run(w, patience + 0.5);
+    expect(walkouts).toBe(1);
+    expect(w.lives).toBe(DEFAULT_CONFIG.lives - 1);
+  });
+
+  it('during the breather nobody spawns, nobody loses patience and input is ignored', () => {
+    const w = busyWorld({ spawn: { ...BASE.spawn, firstDelay: 0, startInterval: 0.2, minInterval: 0.2 } });
+    while (w.state === 'playing') w.update(1 / 60);
+    expect(w.state).toBe('walkout');
+    let spawns = 0;
+    w.events.on('spawn', () => spawns++);
+    w.requestFloor(3);
+    w.hold(1);
+    run(w, breather - 0.2);
+    expect(spawns).toBe(0);
+    expect(w.lift.target).toBe(0);
+    expect(w.lives).toBe(DEFAULT_CONFIG.lives - 1);
+    expect(w.state).toBe('walkout');
+  });
+
+  it('after about 4 seconds at the ground floor play resumes, easing spawns back in', () => {
+    const w = busyWorld();
+    run(w, patience);
+    let recoveredAt = -1;
+    let t = 0;
+    w.events.on('recovered', () => (recoveredAt = t));
+    for (; t < breather + 3; t += 1 / 60) w.update(1 / 60);
+    expect(recoveredAt).toBeGreaterThanOrEqual(breather - 0.05);
+    expect(recoveredAt).toBeLessThan(breather + 0.5);
+    expect(w.state).toBe('playing');
+    expect(w.lift.stoppedAt).toBe(0);
+
+    const eased = w.spawnInterval();
+    run(w, DEFAULT_CONFIG.walkout.easeIn);
+    expect(eased).toBeGreaterThan(w.spawnInterval() * 1.5); // started roughly doubled
+    w.requestFloor(2); // input works again
+    expect(w.lift.target).toBe(2);
+  });
+
+  it('losing the last life ends the run once, with its stats, and freezes the world', () => {
+    const w = busyWorld({ lives: 1 });
+    const over: unknown[] = [];
+    w.events.on('gameOver', (s) => over.push(s));
+    run(w, patience);
+    expect(w.state).toBe('over');
+    expect(w.over).toBe(true);
+    expect(over).toHaveLength(1);
+    expect(over[0]).toMatchObject({ score: w.score, delivered: 1, bestDelivery: w.score });
+    expect((over[0] as { time: number }).time).toBeGreaterThan(patience);
+    const before = w.lift.position;
+    w.requestFloor(3);
+    run(w, 5);
+    expect(w.lift.position).toBe(before);
+    expect(over).toHaveLength(1);
+  });
+
+  it('a new run after game over starts completely fresh', () => {
+    const cfg = cloneConfig();
+    const old = new World(cfg);
+    old.lives = 1;
+    old.score = 500;
+    cfg.lift.capacity += 3; // like a perk: mutates only this run's config copy
+    old.spawnPassenger(1, 0);
+    old.update(patience + 1);
+    expect(old.over).toBe(true);
+
+    const fresh = new World(cloneConfig());
+    expect(fresh.state).toBe('playing');
+    expect(fresh.lives).toBe(DEFAULT_CONFIG.lives);
+    expect(fresh.score).toBe(0);
+    expect(fresh.delivered).toBe(0);
+    expect(fresh.elapsed).toBe(0);
+    expect(fresh.bestDelivery).toBe(0);
+    expect(fresh.passengers.size).toBe(0);
+    expect(fresh.lift.capacity).toBe(DEFAULT_CONFIG.lift.capacity);
   });
 });
 

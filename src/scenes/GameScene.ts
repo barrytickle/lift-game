@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import type { GameConfig } from '../config';
-import { accessories, bankShift, loadProfile, runConfig, saveProfile, type Profile } from '../meta/profile';
+import { accessories, bankShift, loadProfile, recordRun, runConfig, saveProfile, type Profile } from '../meta/profile';
 import { Autopilot } from '../sim/autopilot';
 import type { Perk } from '../sim/perks';
 import { World } from '../sim/World';
@@ -14,11 +14,14 @@ import { CAB_SKINS, COLORS, hex } from '../view/Palette';
 import { PassengerView } from '../view/PassengerView';
 import { FREE_ROOMS, LOBBY, roomById, type RoomTheme } from '../view/rooms';
 import { sfx } from '../view/Sfx';
-import { button, label, PERK_ICONS, pin } from '../view/ui';
+import { showResults } from '../view/ResultsCard';
+import { label, PERK_ICONS, pin } from '../view/ui';
+import { WalkoutBanner } from '../view/WalkoutBanner';
 import { menuLayout, type MenuBackScene, type MenuFrontScene, type Rect } from './MenuScene';
 
-// title (autopilot demo) -> play <-> draft -> over. Title and game over can leave for the shop scene.
-type Phase = 'title' | 'play' | 'draft' | 'over';
+// title (autopilot demo) -> play <-> draft, play <-> walkout (breather), play/walkout -> over (results).
+// These mirror World.state; the menu and results can leave for the shop or restart the scene.
+type Phase = 'title' | 'play' | 'draft' | 'walkout' | 'over';
 
 const DEPTH_WAITING = 6;
 const DEPTH_FX = 40;
@@ -37,9 +40,11 @@ export class GameScene extends Phaser.Scene {
   private liftView!: LiftView;
   private hud!: Hud;
   private panel!: ControlPanel;
+  private banner!: WalkoutBanner;
   private calls!: CallsView;
   private views = new Map<number, PassengerView>();
-  private leaving: { view: PassengerView; floor: number }[] = [];
+  /** passengers walking off to the right; `wait` staggers a walkout so it reads as a crowd */
+  private leaving: { view: PassengerView; floor: number; wait: number }[] = [];
   private phase: Phase = 'title';
   private overlay?: Phaser.GameObjects.Container;
   private groupLabel?: Phaser.GameObjects.Text;
@@ -51,6 +56,7 @@ export class GameScene extends Phaser.Scene {
   /** 0 = game framed in the menu window, 1 = full screen */
   private menuT = 1;
   private starting = false;
+  private leavingScene = false;
 
   constructor() {
     super('game');
@@ -65,6 +71,7 @@ export class GameScene extends Phaser.Scene {
     this.groupLabel = undefined;
     this.live = undefined;
     this.starting = false;
+    this.leavingScene = false;
   }
 
   create(): void {
@@ -73,6 +80,7 @@ export class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.setOrigin(0, 0).setZoom(DPR).setScroll(0, 0);
     cam.setBackgroundColor(COLORS.night);
+    cam.fadeIn(260, 0x2b, 0x2d, 0x42); // pairs with restartTo()'s fade out
 
     this.profile = loadProfile();
     this.accessories = accessories(this.profile);
@@ -106,6 +114,7 @@ export class GameScene extends Phaser.Scene {
     this.calls = new CallsView(this, this.layout, (f) => this.phase === 'play' && this.sendTo(f));
     this.calls.chipsEnabled = !attract;
     this.hud = new Hud(this, cfg.lives);
+    this.banner = new WalkoutBanner(this);
     this.hud.setDelivered(0);
     this.hud.setVisible(!attract);
     this.panel.setVisible(!attract);
@@ -208,7 +217,7 @@ export class GameScene extends Phaser.Scene {
         v.leaving = true;
         v.setDepth(DEPTH_WAITING);
         v.cheer();
-        this.leaving.push({ view: v, floor });
+        this.leaving.push({ view: v, floor, wait: 0 });
         // Everyone exits from the cab, so stack the pops to keep each one readable.
         const fy = layout.floorY(floor);
         this.popText(layout.queueX + 6, fy - 60 - groupIndex * 30, `+${coins}`, COLORS.coin, 26);
@@ -226,20 +235,43 @@ export class GameScene extends Phaser.Scene {
       this.hud.setDelivered(this.world.delivered);
     });
 
-    ev.on('walkout', ({ p, floor, livesLeft }) => {
-      const v = this.views.get(p.id);
-      if (v) {
-        this.views.delete(p.id);
+    ev.on('walkout', ({ p, livesLeft, leavers }) => {
+      // Everyone gives up together: the one who ran out storms off, the rest
+      // sulk and trail out after them. Riders hop out at the nearest floor.
+      const nearest = Phaser.Math.Clamp(Math.round(this.world.lift.position), 0, layout.floors - 1);
+      let n = 0;
+      for (const l of leavers) {
+        const v = this.views.get(l.p.id);
+        if (!v) continue;
+        this.views.delete(l.p.id);
         v.leaving = true;
-        v.fume();
-        this.leaving.push({ view: v, floor });
-        this.popText(v.x, v.y - 80, 'Hmph!', COLORS.angry, 22);
+        v.setDepth(DEPTH_WAITING);
+        const culprit = l.p.id === p.id;
+        if (culprit) {
+          v.fume();
+          this.popText(v.x, v.y - 80, 'Hmph!', COLORS.angry, 24);
+        } else v.sulk();
+        this.leaving.push({ view: v, floor: l.floor ?? nearest, wait: culprit ? 0.55 : 0.3 + 0.1 * n++ });
       }
       if (this.quiet) return;
+      this.panel.letGo();
+      this.panel.setDim(true);
       this.hud.loseLife(livesLeft);
-      this.cameras.main.shake(140, 0.006);
-      sfx.walkout();
+      this.cameras.main.shake(160, 0.005);
+      sfx.lifeLost();
       navigator.vibrate?.(60);
+      if (livesLeft > 0) {
+        this.phase = 'walkout';
+        this.banner.show('Walkout!', null, this.world.cfg.walkout.breather);
+      }
+    });
+
+    ev.on('recovered', () => {
+      if (this.quiet) return;
+      this.phase = 'play';
+      this.panel.setDim(false);
+      this.banner.backToWork();
+      sfx.resume();
     });
 
     ev.on('draft', ({ offer }) => {
@@ -256,13 +288,25 @@ export class GameScene extends Phaser.Scene {
       this.popText(W / 2, this.cameras.main.scrollY + HUD_H + 40, `${perk.name}${lv}!`, PERK_ICONS[perk.id]?.color ?? COLORS.coin, 26);
     });
 
-    ev.on('gameOver', ({ score, delivered }) => {
+    ev.on('gameOver', (stats) => {
       this.phase = 'over';
-      sfx.gameOver();
-      const prevBest = this.profile.best;
-      const isBest = bankShift(this.profile, score);
+      if (this.quiet) return;
+      const coins = bankShift(this.profile, stats.score);
+      const beat = { coins, ...recordRun(this.profile, stats) };
       saveProfile(this.profile);
-      this.time.delayedCall(700, () => this.showGameOver(score, delivered, prevBest, isBest));
+      this.banner.show('Out of hearts!', "That's the end of the shift.", 0);
+      this.time.delayedCall(450, () => sfx.gameOver());
+      // Let the last walkout play out, then the results slide up.
+      this.time.delayedCall(2000, () => {
+        this.banner.hide();
+        this.overlay = showResults(this, {
+          stats,
+          beat,
+          wallet: this.profile.coins,
+          onAgain: () => this.restartTo({ skipTitle: true }),
+          onMenu: () => this.restartTo({}),
+        });
+      });
     });
   }
 
@@ -302,12 +346,13 @@ export class GameScene extends Phaser.Scene {
   update(_t: number, deltaMs: number): void {
     const dt = Math.min(deltaMs / 1000, 0.05);
     this.time_ += dt;
-    if (this.phase === 'play' || this.phase === 'title') this.world.update(dt);
+    if (this.phase === 'play' || this.phase === 'title' || this.phase === 'walkout') this.world.update(dt);
     if (this.phase === 'title') this.pilot?.update(this.world, dt);
 
     const { world, layout } = this;
     this.liftView.update(dt, world.lift, world.usefulFloors());
-    sfx.motorLevel(this.phase === 'play' ? Math.abs(world.lift.velocity) / world.cfg.lift.maxSpeed : 0);
+    const moving = this.phase === 'play' || this.phase === 'walkout';
+    sfx.motorLevel(moving ? Math.abs(world.lift.velocity) / world.cfg.lift.maxSpeed : 0);
     const calls = world.calls();
     this.panel.update(dt, world.lift, calls);
     const cam = this.cameras.main;
@@ -332,8 +377,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Departing passengers walk off to the right, then vanish.
-    this.leaving = this.leaving.filter(({ view, floor }) => {
-      view.step(dt, W + 50, layout.floorY(floor), false, 1);
+    this.leaving = this.leaving.filter((l) => {
+      const { view, floor } = l;
+      l.wait -= dt;
+      view.step(dt, l.wait > 0 ? view.x : W + 50, layout.floorY(floor), false, 1);
       if (view.x >= W + 40) {
         view.destroy();
         return false;
@@ -387,60 +434,12 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- overlays ----------
 
-  private makePanel(
-    lines: { text: string; size: number; color: number; bold?: boolean }[],
-    buttons: { label: string; color?: number; onClick: () => void }[],
-    /** `dim: false` keeps the game visible */
-    opts: { dim?: boolean } = {},
-  ): void {
-    this.overlay?.destroy();
-    const c = this.add.container(0, 0).setDepth(DEPTH_OVERLAY);
-    if (opts.dim !== false) c.add(this.add.rectangle(0, 0, W, H, COLORS.night, 0.62).setOrigin(0).setInteractive()); // swallows taps
-    const g = this.add.graphics();
-    c.add(g);
-
-    // Lay the text out first, then size the panel around it.
-    const texts = lines.map((l) => {
-      const t = label(this, W / 2, 0, l.text, l.size, l.color, l.bold).setOrigin(0.5, 0);
-      c.add(t);
-      return t;
-    });
-    const gap = 14;
-    const textH = texts.reduce((h, t) => h + t.height + gap, -gap);
-    const panelH = 44 + textH + 36 + 58 + 30;
-    const py = H / 2 - panelH / 2;
-    let y = py + 44;
-    for (const t of texts) {
-      t.y = y;
-      y += t.height + gap;
-    }
-    g.fillStyle(0x000000, 0.25).fillRoundedRect(36, py + 8, W - 72, panelH, 28);
-    g.fillStyle(COLORS.wallA, 1).fillRoundedRect(36, py, W - 72, panelH, 28);
-    g.fillStyle(COLORS.cabFrame, 1).fillRoundedRect(36, py, W - 72, 18, { tl: 28, tr: 28, bl: 0, br: 0 });
-
-    const bw = buttons.length > 1 ? 160 : 230;
-    const by = py + panelH - 30 - 29;
-    buttons.forEach((b, i) => {
-      const bx = W / 2 + (i - (buttons.length - 1) / 2) * (bw + 16);
-      c.add(button(this, bx, by, bw, 58, b.label, { color: b.color, onClick: b.onClick, pulse: i === buttons.length - 1 }));
-    });
-
-    pin(c);
-    c.setAlpha(0);
-    this.tweens.add({ targets: c, alpha: 1, duration: 250 });
-    this.overlay = c;
-  }
-
   private closeOverlay(): void {
     const o = this.overlay;
     this.overlay = undefined;
     if (!o) return;
     o.each((child: Phaser.GameObjects.GameObject) => child.disableInteractive());
     this.tweens.add({ targets: o, alpha: 0, duration: 200, onComplete: () => o.destroy() });
-  }
-
-  private walletLine(): string {
-    return `Wallet: ${this.profile.coins.toLocaleString()} coins`;
   }
 
   /** "Start Shift": the menu slides away and the demo window grows into the live game. */
@@ -557,31 +556,11 @@ export class GameScene extends Phaser.Scene {
     this.overlay = c;
   }
 
-  private showGameOver(score: number, delivered: number, prevBest: number, isBest: boolean): void {
-    this.makePanel(
-      [
-        { text: 'Shift over!', size: 44, color: COLORS.cabFrame, bold: true },
-        { text: `+${score.toLocaleString()}`, size: 60, color: COLORS.ink, bold: true },
-        { text: 'coins banked', size: 18, color: 0x8a8ca8, bold: true },
-        {
-          text: isBest ? 'New best!' : `Best: ${prevBest.toLocaleString()}`,
-          size: 20,
-          color: isBest ? COLORS.happy : 0x8a8ca8,
-          bold: true,
-        },
-        { text: `${delivered} passengers delivered\n${this.walletLine()}`, size: 18, color: COLORS.ink },
-      ],
-      [
-        { label: 'Shop', color: COLORS.shaft, onClick: () => this.scene.start('shop') },
-        { label: 'Again!', onClick: () => this.scene.restart({ skipTitle: true }) },
-      ],
-    );
-    // Brief lockout so a frantic tap doesn't skip the results.
-    const setEnabled = (on: boolean) =>
-      this.overlay?.each((ch: Phaser.GameObjects.GameObject) => {
-        if (ch.input) ch.input.enabled = on;
-      });
-    setEnabled(false);
-    this.time.delayedCall(600, () => setEnabled(true));
+  /** Fade out, then restart the scene: a brand-new World, so nothing from this run carries over. */
+  private restartTo(data: { skipTitle?: boolean }): void {
+    if (this.leavingScene) return;
+    this.leavingScene = true;
+    this.cameras.main.fadeOut(260, 0x2b, 0x2d, 0x42);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.restart(data));
   }
 }

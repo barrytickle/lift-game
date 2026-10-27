@@ -134,6 +134,14 @@ export class PassengerView extends Phaser.GameObjects.Container {
     this.scene.tweens.add({ targets: this.inner, y: -26, duration: 160, yoyo: true, ease: 'Quad.Out' });
   }
 
+  /** Give up and leave with everyone else in a walkout: a grumpy face and a little huff. */
+  sulk(): void {
+    this.mood = 2;
+    this.drawFace();
+    this.badge.setVisible(false);
+    this.scene.tweens.add({ targets: this.inner, y: -12, duration: 130, yoyo: true, ease: 'Quad.Out' });
+  }
+
   /** Storm off with a puff of steam. */
   fume(): void {
     this.mood = 3;

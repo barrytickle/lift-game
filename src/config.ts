@@ -60,6 +60,16 @@ export interface GameConfig {
   };
 
   lives: number;
+
+  /** building-wide walkout when someone runs out of patience */
+  walkout: {
+    /** seconds of breathing room: no spawns, no patience loss, lift heads home */
+    breather: number;
+    /** after the breather, spawns ease back from double the interval to normal over this many seconds */
+    easeIn: number;
+    /** seconds until the first newcomer after a walkout */
+    firstSpawn: number;
+  };
 }
 
 export const DEFAULT_CONFIG: GameConfig = {
@@ -98,7 +108,12 @@ export const DEFAULT_CONFIG: GameConfig = {
     gapGrowth: 10,
     choices: 3,
   },
-  lives: 5,
+  lives: 3,
+  walkout: {
+    breather: 4,
+    easeIn: 15,
+    firstSpawn: 1.2,
+  },
 };
 
 /** Each shift gets its own copy: perks and upgrades mutate it freely. */

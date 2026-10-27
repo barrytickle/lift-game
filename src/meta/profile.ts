@@ -14,19 +14,42 @@ export interface Profile {
   /** bought room, skin and style ids */
   owned: string[];
   cabSkin: string;
+  /** personal bests besides coins (which is `best`) */
+  records: RunRecords;
+}
+
+export interface RunRecords {
+  delivered: number;
+  /** biggest single drop-off payout */
+  bestDelivery: number;
+  /** longest shift, seconds */
+  time: number;
 }
 
 const KEY = 'going-up-profile';
 const OLD_BEST_KEY = 'going-up-best';
 
 export function newProfile(): Profile {
-  return { v: 1, coins: 0, best: 0, shifts: 0, upgrades: {}, owned: [], cabSkin: DEFAULT_SKIN };
+  return {
+    v: 1,
+    coins: 0,
+    best: 0,
+    shifts: 0,
+    upgrades: {},
+    owned: [],
+    cabSkin: DEFAULT_SKIN,
+    records: { delivered: 0, bestDelivery: 0, time: 0 },
+  };
 }
 
 export function loadProfile(): Profile {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...newProfile(), ...JSON.parse(raw) };
+    if (raw) {
+      const saved = JSON.parse(raw) as Partial<Profile>;
+      const base = newProfile();
+      return { ...base, ...saved, records: { ...base.records, ...saved.records } };
+    }
     const p = newProfile();
     p.best = Number(localStorage.getItem(OLD_BEST_KEY) ?? 0) || 0;
     return p;
@@ -70,6 +93,17 @@ export function bankShift(p: Profile, score: number): boolean {
   const isBest = score > p.best;
   if (isBest) p.best = score;
   return isBest;
+}
+
+/** Update personal bests from a finished run. Returns which ones it beat. */
+export function recordRun(p: Profile, run: RunRecords): Record<keyof RunRecords, boolean> {
+  const beat = {
+    delivered: run.delivered > p.records.delivered,
+    bestDelivery: run.bestDelivery > p.records.bestDelivery,
+    time: run.time > p.records.time,
+  };
+  for (const k of Object.keys(beat) as (keyof RunRecords)[]) if (beat[k]) p.records[k] = run[k];
+  return beat;
 }
 
 /** The shift's config: defaults plus permanent upgrades. */

@@ -108,3 +108,42 @@ export const PERK_ICONS: Record<string, { glyph: string; color: number }> = {
   comfy: { glyph: 'Zz', color: 0x8d6e63 },
   coinbag: { glyph: '50', color: 0xf2b630 },
 };
+
+/** Chunky pill button with a darker lip underneath; label and icon are added by the caller. */
+export function pillButton(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color: number,
+  lip: number,
+  onClick: () => void,
+): Phaser.GameObjects.Container {
+  const c = scene.add.container(x, y);
+  const g = scene.add.graphics();
+  const r = Math.min(26, h / 2);
+  g.fillStyle(lip, 1).fillRoundedRect(-w / 2, -h / 2 + 6, w, h, r);
+  g.fillStyle(color, 1).fillRoundedRect(-w / 2, -h / 2, w, h, r);
+  g.fillStyle(0xffffff, 0.12).fillRoundedRect(-w / 2 + r * 0.7, -h / 2 + 5, w - r * 1.4, h * 0.3, h * 0.15);
+  c.add(g);
+  c.setSize(w, h + 6).setInteractive({ useHandCursor: true });
+  let pressed = false;
+  c.on('pointerdown', () => {
+    sfx.unlock();
+    pressed = true;
+    c.setScale(0.95);
+  });
+  c.on('pointerout', () => {
+    pressed = false;
+    c.setScale(1);
+  });
+  c.on('pointerup', () => {
+    if (!pressed) return;
+    pressed = false;
+    c.setScale(1);
+    sfx.tap();
+    onClick();
+  });
+  return c;
+}

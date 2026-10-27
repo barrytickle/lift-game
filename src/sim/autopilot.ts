@@ -21,7 +21,7 @@ export class Autopilot {
 
   update(w: World, dt: number): void {
     const at = w.lift.stoppedAt;
-    if (at === null || w.over || w.offer) return;
+    if (at === null || w.state !== 'playing' || w.offer) return;
     const busy =
       w.lift.riders.some((id) => w.passengers.get(id)!.dest === at) || (w.queues[at].length > 0 && !w.lift.isFull);
     if (busy) {

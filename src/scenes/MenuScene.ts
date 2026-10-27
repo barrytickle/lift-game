@@ -3,7 +3,7 @@ import type { Profile } from '../meta/profile';
 import { DPR, FONT, H, W } from '../view/Layout';
 import { COLORS, hex } from '../view/Palette';
 import { sfx } from '../view/Sfx';
-import { coinIcon, label } from '../view/ui';
+import { coinIcon, label, pillButton } from '../view/ui';
 
 // The main menu is two thin scenes around GameScene, which keeps running the
 // autopilot tower in a window between them:
@@ -241,14 +241,14 @@ export class MenuBackScene extends Phaser.Scene {
 
     c.add(label(this, W / 2, 70, 'Run the lift, deliver passengers,\nand keep everyone happy.', 19, 0x6b6e8a).setOrigin(0.5, 0));
 
-    const start = bigButton(this, W / 2, 166, W - 120, 72, CORAL, CORAL_DARK, () => this.fire(onStart));
+    const start = pillButton(this, W / 2, 166, W - 120, 72, CORAL, CORAL_DARK, () => this.fire(onStart));
     const st = label(this, -18, 0, 'Start Shift', 34, 0xffffff, true).setOrigin(0.5);
     const tri = this.add.graphics({ x: st.width / 2 + 14, y: 0 });
     tri.fillStyle(0xffffff, 1).fillTriangle(-15, 11, 15, 11, 0, -13);
     start.add([st, tri]);
     this.tweens.add({ targets: start, scale: 1.03, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
 
-    const shop = bigButton(this, W / 2, 246, 230, 56, NAVY, NAVY_DARK, () => this.fire(onShop));
+    const shop = pillButton(this, W / 2, 246, 230, 56, NAVY, NAVY_DARK, () => this.fire(onShop));
     const sh = label(this, -16, 0, 'Shop', 26, 0xffffff, true).setOrigin(0.5);
     shop.add([sh, cart(this, sh.width / 2 + 16, 0)]);
     c.add([start, shop]);
@@ -329,45 +329,6 @@ function cart(scene: Phaser.Scene, x: number, y: number): Phaser.GameObjects.Gra
   return g;
 }
 
-/** Chunky pill button with a darker lip underneath; label and icon are added by the caller. */
-function bigButton(
-  scene: Phaser.Scene,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  color: number,
-  lip: number,
-  onClick: () => void,
-): Phaser.GameObjects.Container {
-  const c = scene.add.container(x, y);
-  const g = scene.add.graphics();
-  const r = Math.min(26, h / 2);
-  g.fillStyle(lip, 1).fillRoundedRect(-w / 2, -h / 2 + 6, w, h, r);
-  g.fillStyle(color, 1).fillRoundedRect(-w / 2, -h / 2, w, h, r);
-  g.fillStyle(0xffffff, 0.12).fillRoundedRect(-w / 2 + r * 0.7, -h / 2 + 5, w - r * 1.4, h * 0.3, h * 0.15);
-  c.add(g);
-  c.setSize(w, h + 6).setInteractive({ useHandCursor: true });
-  let pressed = false;
-  c.on('pointerdown', () => {
-    sfx.unlock();
-    pressed = true;
-    c.setScale(0.95);
-  });
-  c.on('pointerout', () => {
-    pressed = false;
-    c.setScale(1);
-  });
-  c.on('pointerup', () => {
-    if (!pressed) return;
-    pressed = false;
-    c.setScale(1);
-    sfx.tap();
-    onClick();
-  });
-  return c;
-}
-
 // ---------- menu-front ----------
 
 export class MenuFrontScene extends Phaser.Scene {
@@ -383,7 +344,7 @@ export class MenuFrontScene extends Phaser.Scene {
     setupCamera(this);
     this.frame = this.add.graphics();
     this.soundIcon = this.add.graphics();
-    this.muteBtn = bigButton(this, 0, 0, 52, 48, CREAM, 0xe2cdb6, () => {
+    this.muteBtn = pillButton(this, 0, 0, 52, 48, CREAM, 0xe2cdb6, () => {
       sfx.setMuted(!sfx.muted);
       this.drawSoundIcon();
     });

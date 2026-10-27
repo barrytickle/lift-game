@@ -121,6 +121,11 @@ export class ControlPanel {
     this.root.setVisible(on);
   }
 
+  /** Greyed out while the lift heads home during a walkout (input is ignored then anyway). */
+  setDim(on: boolean): void {
+    this.scene.tweens.add({ targets: this.root, alpha: on ? 0.45 : 1, duration: 250 });
+  }
+
   /** Appear when the menu window has grown into the live game. */
   fadeIn(): void {
     this.root.setVisible(true).setAlpha(0);

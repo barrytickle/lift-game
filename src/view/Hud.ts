@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { DPR, FONT, HUD_H, W } from './Layout';
 import { COLORS, hex } from './Palette';
-import { pin } from './ui';
+import { label, pin } from './ui';
 
 export class Hud {
   private scoreText: Phaser.GameObjects.Text;
@@ -90,17 +90,51 @@ export class Hud {
     this.subText.setText(`${n} delivered`);
   }
 
+  /** Swell, wobble, then crack in two: the halves tumble away and an empty heart pops in. */
   loseLife(livesLeft: number): void {
     this.lives = livesLeft;
     const g = this.hearts[livesLeft];
     if (!g) return;
-    this.scene.tweens.add({
+    const base = g.scaleX;
+    this.scene.tweens.killTweensOf(g);
+    this.scene.tweens.chain({
       targets: g,
-      scale: 1.6,
-      duration: 120,
-      yoyo: true,
-      onComplete: () => this.drawHeart(g, COLORS.heartEmpty),
+      tweens: [
+        { scale: base * 1.7, duration: 160, ease: 'Back.Out' },
+        { angle: 14, duration: 55, yoyo: true, repeat: 2, ease: 'Sine.InOut' },
+      ],
+      onComplete: () => {
+        g.setAngle(0).setScale(base * 0.2);
+        this.drawHeart(g, COLORS.heartEmpty);
+        this.scene.tweens.add({ targets: g, scale: base, duration: 380, delay: 220, ease: 'Back.Out' });
+        this.crack(g.x, g.y, base * 1.4);
+      },
     });
+    const minus = label(this.scene, g.x, g.y + 26, '-1', 20, COLORS.heart, true).setOrigin(0.5).setStroke('#ffffff', 5);
+    this.root.add(pin(minus));
+    this.scene.tweens.add({ targets: minus, y: minus.y + 18, alpha: 0, delay: 500, duration: 700, onComplete: () => minus.destroy() });
+  }
+
+  /** Two heart halves that split apart and fall. */
+  private crack(x: number, y: number, s: number): void {
+    for (const side of [-1, 1]) {
+      const half = pin(this.scene.add.graphics({ x, y }).setScale(s));
+      half.fillStyle(COLORS.heart, 1);
+      half.fillCircle(side * 6, -3, 7.5);
+      half.fillTriangle(side * 13, 0, 0, 0, 0, 14);
+      half.fillTriangle(side * 1, -6, 0, 0, side * 3, 4); // jagged edge
+      this.root.add(half);
+      this.scene.tweens.add({
+        targets: half,
+        x: x + side * 22,
+        y: y + 46,
+        angle: side * 50,
+        alpha: 0,
+        duration: 650,
+        ease: 'Quad.In',
+        onComplete: () => half.destroy(),
+      });
+    }
   }
 
   /** Coin counter rolls up rather than jumping. */

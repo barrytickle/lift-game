@@ -8,6 +8,15 @@ import { drawPerks, perkById, type Perk } from './perks';
 
 export type PassengerState = 'waiting' | 'riding' | 'gone';
 
+/**
+ * Run states (design/game-brief.md, "Lives and walkouts"):
+ *   playing --(someone's patience hits 0, lives left)--> walkout
+ *   walkout --(breather over and lift back at G)-------> playing
+ *   playing --(someone's patience hits 0, last life)---> over
+ * A perk draft pauses `playing` without leaving it.
+ */
+export type RunState = 'playing' | 'walkout' | 'over';
+
 export interface Passenger {
   id: number;
   origin: number;
@@ -23,13 +32,25 @@ export interface WorldEvents {
   spawn: { p: Passenger };
   board: { p: Passenger; floor: number };
   deliver: { p: Passenger; floor: number; coins: number; groupIndex: number };
-  walkout: { p: Passenger; floor: number; livesLeft: number };
+  /** `p` ran out of patience on `floor`; everyone in `leavers` (floor null = was riding) leaves too */
+  walkout: { p: Passenger; floor: number; livesLeft: number; leavers: { p: Passenger; floor: number | null }[] };
+  /** breather over: back to normal play */
+  recovered: Record<string, never>;
   arrive: { floor: number };
   depart: { from: number; to: number };
   /** sim pauses until choosePerk() is called */
   draft: { offer: Perk[] };
   perk: { perk: Perk; level: number };
-  gameOver: { score: number; delivered: number; time: number };
+  gameOver: RunStats;
+}
+
+export interface RunStats {
+  score: number;
+  delivered: number;
+  /** seconds on shift, including walkout breathers (draft pauses excluded) */
+  time: number;
+  /** biggest single drop-off payout */
+  bestDelivery: number;
 }
 
 export class World {
@@ -43,8 +64,12 @@ export class World {
   delivered = 0;
   lives: number;
   maxLives: number;
+  /** difficulty clock: stands still during walkouts */
   time = 0;
-  over = false;
+  /** wall-clock time on shift for the results screen */
+  elapsed = 0;
+  state: RunState = 'playing';
+  bestDelivery = 0;
   /** perk id -> times taken this shift */
   readonly perks: Record<string, number> = {};
   /** non-null while a draft is waiting for the player's pick */
@@ -56,6 +81,10 @@ export class World {
   private dropsThisStop = 0;
   private nextDraftAt: number;
   private draftsTaken = 0;
+  /** seconds of walkout breather left */
+  private breather = 0;
+  /** seconds left of the eased spawn rate after a walkout */
+  private calm = 0;
 
   constructor(
     readonly cfg: GameConfig,
@@ -68,12 +97,21 @@ export class World {
     this.nextDraftAt = cfg.draft.first;
   }
 
+  get over(): boolean {
+    return this.state === 'over';
+  }
+
+  /** Player input only counts while playing (not during a walkout or after game over). */
+  private get live(): boolean {
+    return this.state === 'playing';
+  }
+
   /** Direction of a held ▲/▼, or 0. */
   holding: 0 | 1 | -1 = 0;
 
   /** Player input: send the lift to a floor. Allowed at any time, even mid-trip. */
   requestFloor(floor: number): void {
-    if (this.over || floor < 0 || floor >= this.cfg.floors) return;
+    if (!this.live || floor < 0 || floor >= this.cfg.floors) return;
     this.holding = 0;
     if (floor === this.lift.target) return;
     const from = this.lift.stoppedAt;
@@ -83,7 +121,7 @@ export class World {
 
   /** Player input: start moving continuously while ▲/▼ is held. */
   hold(dir: 1 | -1): void {
-    if (this.over) return;
+    if (!this.live) return;
     const from = this.lift.stoppedAt;
     this.holding = dir;
     this.lift.hold(dir, this.cfg.floors);
@@ -98,18 +136,24 @@ export class World {
   }
 
   update(dt: number): void {
-    if (this.over) return;
+    if (this.state === 'over') return;
     if (this.offer) return; // paused for a perk draft
+    this.elapsed += dt;
+    if (this.state === 'walkout') {
+      this.tickBreather(dt);
+      return;
+    }
     if (this.delivered >= this.nextDraftAt) {
       this.offer = drawPerks(this.rng, this.cfg.draft.choices, this.perks, this);
       this.events.emit('draft', { offer: this.offer });
       return;
     }
     this.time += dt;
+    this.calm = Math.max(0, this.calm - dt);
 
     this.tickSpawning(dt);
     this.tickPatience(dt);
-    if (this.over) return;
+    if (this.state !== 'playing') return;
 
     if (this.lift.update(dt)) {
       this.transferTimer = this.cfg.lift.transferInterval * 0.6; // brief beat as doors open
@@ -131,7 +175,10 @@ export class World {
     this.score = 0;
     this.delivered = 0;
     this.lives = this.maxLives = this.cfg.lives;
-    this.over = false;
+    this.state = 'playing';
+    this.elapsed = 0;
+    this.bestDelivery = 0;
+    this.calm = 0;
     this.nextDraftAt = this.cfg.draft.first;
     this.draftsTaken = 0;
     this.spawnTimer = Math.min(this.spawnTimer, this.cfg.spawn.startInterval);
@@ -156,9 +203,11 @@ export class World {
    */
   spawnInterval(): number {
     const { startInterval, minInterval, rampTime, overtimeHalfLife, floorInterval } = this.cfg.spawn;
-    if (this.time < rampTime) return startInterval + (minInterval - startInterval) * (this.time / rampTime);
+    // Just after a walkout the interval starts doubled and eases back to normal.
+    const ease = 1 + this.calm / this.cfg.walkout.easeIn;
+    if (this.time < rampTime) return ease * (startInterval + (minInterval - startInterval) * (this.time / rampTime));
     const overtime = minInterval * Math.pow(0.5, (this.time - rampTime) / overtimeHalfLife);
-    return Math.max(floorInterval, overtime);
+    return ease * Math.max(floorInterval, overtime);
   }
 
   /** Floors that at least one rider wants to get off at. */
@@ -228,29 +277,65 @@ export class World {
   }
 
   private tickPatience(dt: number): void {
+    // Everyone loses patience together; if several hit zero on the same tick,
+    // the most impatient one starts the walkout and it still costs one life.
+    let culprit: { p: Passenger; floor: number } | null = null;
     for (let f = 0; f < this.queues.length; f++) {
-      const q = this.queues[f];
-      for (let i = q.length - 1; i >= 0; i--) {
-        const p = this.passengers.get(q[i])!;
-        p.patience -= dt;
-        if (p.patience > 0) continue;
-        q.splice(i, 1);
-        p.patience = 0;
-        p.state = 'gone';
-        this.passengers.delete(p.id);
-        this.lives--;
-        this.events.emit('walkout', { p, floor: f, livesLeft: this.lives });
-        if (this.lives <= 0) {
-          this.over = true;
-          this.events.emit('gameOver', { score: this.score, delivered: this.delivered, time: this.time });
-          return;
-        }
+      for (const id of this.queues[f]) {
+        const p = this.passengers.get(id)!;
+        p.patience = Math.max(0, p.patience - dt);
+        if (p.patience === 0 && !culprit) culprit = { p, floor: f };
       }
     }
     for (const id of this.lift.riders) {
       const p = this.passengers.get(id)!;
       p.patience = Math.max(0, p.patience - dt * this.cfg.passengers.ridingDrain);
     }
+    if (culprit) this.walkout(culprit.p, culprit.floor);
+  }
+
+  /**
+   * Building-wide walkout: everyone waiting or riding gives up and leaves, one
+   * life is lost, and (if any are left) the lift heads home for a breather.
+   * Score and deliveries so far are kept.
+   */
+  private walkout(culprit: Passenger, floor: number): void {
+    const leavers: { p: Passenger; floor: number | null }[] = [];
+    this.queues.forEach((q, f) => {
+      for (const id of q) leavers.push({ p: this.passengers.get(id)!, floor: f });
+      q.length = 0;
+    });
+    for (const id of this.lift.riders) leavers.push({ p: this.passengers.get(id)!, floor: null });
+    this.lift.riders.length = 0;
+    for (const { p } of leavers) p.state = 'gone';
+    this.passengers.clear();
+    this.holding = 0;
+    this.lift.target = 0;
+    this.lives--;
+    this.events.emit('walkout', { p: culprit, floor, livesLeft: this.lives, leavers });
+
+    if (this.lives <= 0) {
+      this.state = 'over';
+      this.events.emit('gameOver', this.stats());
+      return;
+    }
+    this.state = 'walkout';
+    this.breather = this.cfg.walkout.breather;
+  }
+
+  /** During a walkout: nobody spawns or loses patience while the lift returns to G. */
+  private tickBreather(dt: number): void {
+    this.breather = Math.max(0, this.breather - dt);
+    this.lift.update(dt);
+    if (this.breather > 0 || this.lift.stoppedAt !== 0) return;
+    this.state = 'playing';
+    this.calm = this.cfg.walkout.easeIn;
+    this.spawnTimer = this.cfg.walkout.firstSpawn;
+    this.events.emit('recovered', {});
+  }
+
+  stats(): RunStats {
+    return { score: this.score, delivered: this.delivered, time: this.elapsed, bestDelivery: this.bestDelivery };
   }
 
   /** One passenger moves per transferInterval: everyone off first, then boarding. */
@@ -274,6 +359,7 @@ export class World {
         perFloor * Math.abs(p.dest - p.origin);
       this.score += coins;
       this.delivered++;
+      this.bestDelivery = Math.max(this.bestDelivery, coins);
       this.events.emit('deliver', { p, floor, coins, groupIndex });
       this.transferTimer = this.cfg.lift.transferInterval;
       return;

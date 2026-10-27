@@ -18,6 +18,12 @@
 - Bare-minimum start: **3 floors, a slow lift and one seat**, so there's plenty to work towards. Taller Tower (shop, up to 8 floors), Better Motor and Bigger Cab (shop) grow it; Roomy Cab and Turbo Motor (perks) help mid-shift
 - Hold ▲/▼ to move; on release the lift settles on the nearest floor (firm brakes, so it can ease back to one it just passed). A quick tap moves one floor
 - Coins per delivery include a per-floor bonus for longer trips, so taller towers pay more
+- **Lives and walkouts:** 3 hearts per run. When a waiting passenger's patience runs out, the whole building walks out:
+  they storm off (angry face for the one who snapped, grumpy faces for the rest), riders hop out, one heart breaks,
+  and there's a 4 s breather (no spawns, no patience loss) while the lift returns to G. Spawns then ease back in
+  over 15 s. Coins and deliveries so far are kept. Simultaneous failures still cost one heart
+- **End of run:** losing the last heart shows a results card (delivered, coins earned, best delivery, shift time) with
+  NEW BEST ribbons from saved personal bests, plus Play Again and Main Menu
 - Readability: hall-call lamps light ▲/▼ on floors with people waiting (red and pulsing when someone is close to leaving), the panel buttons ring when calls are above/below, off-screen calls show as tappable chips, and the cab glows green when lined up with a floor where stopping helps
 - Passenger spawning with destinations and a visible patience ring
 - Automatic exit-then-board at stops, one person at a time

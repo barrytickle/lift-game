@@ -180,6 +180,24 @@ export class Sfx {
     this.tone(base * 1.5, 0.16, 'square', 0.05, undefined, 0.06);
   }
 
+  /** A heart breaks: soft and sorry rather than harsh. */
+  lifeLost(): void {
+    this.tone(659, 0.18, 'sine', 0.09);
+    this.tone(523, 0.22, 'sine', 0.08, undefined, 0.14);
+    this.tone(392, 0.45, 'triangle', 0.07, 349, 0.3);
+  }
+
+  /** Breather over: a cheerful little "back to work". */
+  resume(): void {
+    [523, 659, 784].forEach((f, i) => this.tone(f, 0.14, 'triangle', 0.07, undefined, i * 0.08));
+  }
+
+  /** Results screen: one tick per stat as it lands; `big` for a new personal best. */
+  stat(big: boolean): void {
+    this.tone(big ? 988 : 784, 0.12, 'triangle', 0.08);
+    if (big) this.tone(1319, 0.25, 'sine', 0.07, undefined, 0.08);
+  }
+
   walkout(): void {
     this.tone(220, 0.25, 'sawtooth', 0.08, 110);
   }

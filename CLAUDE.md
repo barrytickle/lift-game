@@ -16,7 +16,8 @@ This project uses a trimmed copy of the Game Studios framework (from `C:\Users\B
 - `src/config.ts`: every gameplay tuning value. Upgrades later = a modified copy passed to `World`.
 - `src/sim/`: pure simulation (`World`, `Lift`, `Emitter`, `perks`, `autopilot`). **No Phaser imports.** It emits events
   (`spawn`, `board`, `deliver`, `walkout`, `arrive`, `depart`, `draft`, `perk`, `gameOver`).
-  A `draft` pauses the sim until `World.choosePerk()`. Input: `requestFloor`, or `hold(dir)`/`release()`
+  Run states are explicit (`World.state`: `playing` → `walkout` → `playing`, or → `over`): one patience failure
+  empties the building, costs exactly one life and starts a breather. A `draft` pauses the sim until `World.choosePerk()`. Input: `requestFloor`, or `hold(dir)`/`release()`
   (release settles on the floor nearest where the cab would stop; a quick tap moves one floor). `Autopilot` drives the menu demo and the bot.
 - `src/meta/`: shop catalog and the saved `Profile` (localStorage). `runConfig(profile)` builds each
   shift's config copy from the permanent upgrades; perks then mutate that copy during the shift.
@@ -30,6 +31,8 @@ This project uses a trimmed copy of the Game Studios framework (from `C:\Users\B
   `menu-front` above: window frame, mute). GameScene runs the autopilot demo in a camera viewport between
   them and grows it to full screen on Start Shift, then `World.startShift()` turns the demo into the live shift.
   `ShopScene.ts`: spend banked coins (Upgrades / Rooms / Style tabs).
+- `src/view/WalkoutBanner.ts` (walkout breather card) and `view/ResultsCard.ts` (end-of-run stats with personal bests,
+  stored in `Profile.records`). Play Again / Main Menu restart the scene, so every run gets a fresh `World`.
 - `tests/`: Vitest on the sim. `tools/balance.ts`: headless bot that plays many shifts.
 
 ## Commands

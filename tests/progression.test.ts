@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cloneConfig, DEFAULT_CONFIG } from '../src/config';
 import { ALL_ITEMS, UPGRADES } from '../src/meta/catalog';
-import { accessories, bankShift, buy, newProfile, nextCost, runConfig } from '../src/meta/profile';
+import { accessories, bankShift, buy, loadProfile, newProfile, nextCost, recordRun, runConfig, saveProfile } from '../src/meta/profile';
 import { COIN_BAG, drawPerks, PERKS } from '../src/sim/perks';
 import { World } from '../src/sim/World';
 
@@ -110,13 +110,39 @@ describe('shop and profile', () => {
     p.upgrades = { floors: 2, capacity: 2, heart: 1, motor: 3, headstart: 1, lucky: 1 };
     const cfg = runConfig(p);
     expect(cfg.lift.capacity).toBe(3);
-    expect(cfg.lives).toBe(6);
+    expect(cfg.lives).toBe(DEFAULT_CONFIG.lives + 1);
     expect(cfg.floors).toBe(DEFAULT_CONFIG.floors + 2);
     expect(cfg.lift.maxSpeed).toBeCloseTo(DEFAULT_CONFIG.lift.maxSpeed * 1.45);
     expect(cfg.draft.first).toBe(0);
     expect(cfg.draft.choices).toBe(4);
     expect(DEFAULT_CONFIG.lift.capacity).toBe(1);
     expect(DEFAULT_CONFIG.floors).toBe(3);
+  });
+
+  it('keeps personal bests per stat and reports which ones a run beat', () => {
+    const p = newProfile();
+    expect(recordRun(p, { delivered: 12, bestDelivery: 30, time: 95 })).toEqual({ delivered: true, bestDelivery: true, time: true });
+    expect(recordRun(p, { delivered: 10, bestDelivery: 41, time: 95 })).toEqual({ delivered: false, bestDelivery: true, time: false });
+    expect(p.records).toEqual({ delivered: 12, bestDelivery: 41, time: 95 });
+  });
+
+  it('old saves without records load with empty records', () => {
+    const store = new Map<string, string>();
+    const ls = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
+    const g = globalThis as unknown as { localStorage?: typeof ls };
+    const prev = g.localStorage;
+    g.localStorage = ls;
+    try {
+      store.set('going-up-profile', JSON.stringify({ v: 1, coins: 50, best: 20, shifts: 2, upgrades: {}, owned: [], cabSkin: 'skin-classic' }));
+      const p = loadProfile();
+      expect(p.coins).toBe(50);
+      expect(p.records).toEqual({ delivered: 0, bestDelivery: 0, time: 0 });
+      recordRun(p, { delivered: 3, bestDelivery: 9, time: 40 });
+      saveProfile(p);
+      expect(loadProfile().records).toEqual({ delivered: 3, bestDelivery: 9, time: 40 });
+    } finally {
+      g.localStorage = prev;
+    }
   });
 
   it('banks shift coins and tracks the best', () => {

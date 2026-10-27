@@ -6,6 +6,7 @@ import { sfx } from './view/Sfx';
 //   - going to the background silences all audio and lets the active scene pause play
 //   - coming back restores audio (play stays paused until the player resumes)
 //   - Android's back button is handed to the active scene
+//   - on Android, audio (and so the music) starts at launch without waiting for a tap
 
 export const isNative = Capacitor.isNativePlatform();
 
@@ -43,6 +44,9 @@ function toForeground(): void {
 export function initPlatform(): void {
   document.addEventListener('visibilitychange', () => (document.hidden ? toBackground() : toForeground()));
   if (!isNative) return;
+  // The app's WebView has no autoplay rule, so the menu music can start straight away
+  // instead of waiting for the first tap like the browser build must.
+  sfx.unlock();
   void App.addListener('pause', toBackground);
   void App.addListener('resume', toForeground);
   void App.addListener('backButton', () => hooks?.back());
